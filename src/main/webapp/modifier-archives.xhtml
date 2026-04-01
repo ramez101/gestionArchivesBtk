@@ -1,0 +1,317 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+        "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:ui="jakarta.faces.facelets"
+                xmlns:h="jakarta.faces.html"
+                xmlns:f="jakarta.faces.core"
+                xmlns:p="http://primefaces.org/ui"
+                template="/WEB-INF/templates/app.xhtml">
+
+    <ui:define name="title">BTK - Modifier archives</ui:define>
+
+    <ui:define name="content">
+        <style type="text/css">
+            .modifier-result {
+                margin-top: 18px;
+                padding: 16px;
+                border: 1px solid #d5e1ee;
+                border-radius: 12px;
+                transition: background .18s ease, border-color .18s ease;
+            }
+
+            .modifier-result.modifier-empty {
+                background: #f1f6fb;
+            }
+
+            .modifier-result.modifier-ready {
+                background: #fff;
+                border-color: #c7d7e8;
+            }
+
+            .modifier-actions {
+                margin-top: 16px;
+                display: flex;
+                justify-content: center;
+                gap: 10px;
+            }
+
+            .modifier-btn.ui-button.ui-widget {
+                min-height: 34px;
+                border-radius: 8px;
+                padding: 0;
+                font-weight: 700;
+            }
+
+            .modifier-btn.ui-button.ui-widget .ui-button-text {
+                padding: 7px 16px;
+                font-size: .82rem;
+            }
+
+            .modifier-confirm.ui-dialog {
+                border: 0;
+                box-shadow: 0 18px 45px rgba(0, 0, 0, .18);
+                border-radius: 10px;
+                overflow: hidden;
+            }
+
+            .modifier-confirm.ui-dialog .ui-dialog-titlebar {
+                background: #ffffff;
+                color: #eb0a0a;
+                border: 0;
+                border-bottom: 1px solid #e3e3e3;
+                font-weight: 700;
+                padding: 12px 16px;
+            }
+
+            .modifier-confirm.ui-dialog .ui-dialog-content {
+                border: none;
+                padding: 18px 20px 12px;
+                color: #3f3f3f;
+            }
+
+            .modifier-confirm .ui-dialog-titlebar .ui-dialog-title {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .modifier-confirm .ui-dialog-titlebar .ui-dialog-title:before {
+                content: "⚠";
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 22px;
+                height: 30px;
+                border-radius: 999px;
+                color: #b12b2b;
+            }
+
+            .modifier-confirm .ui-button.ui-widget {
+                border-radius: 8px;
+                font-weight: 700;
+                min-width: 120px;
+            }
+
+            .modifier-confirm .confirm-yes.ui-button.ui-widget {
+                background: #ffffff;
+                border: 1px solid #5bb6b3;
+                color: #4aa6a3;
+                box-shadow: none;
+            }
+
+            .modifier-confirm .confirm-no.ui-button.ui-widget {
+                background: #ffffff;
+                border: 1px solid #eb0a0a;
+                color: #eb0a0a;
+                box-shadow: none;
+            }
+
+            .modifier-confirm .confirm-yes.ui-button.ui-widget:hover,
+            .modifier-confirm .confirm-no.ui-button.ui-widget:hover {
+                filter: brightness(0.98);
+            }
+        </style>
+
+        <div class="container">
+            <div class="card">
+                <div class="card-title">Modifier archives</div>
+                <h:form id="modifierForm" prependId="false">
+                    <p:messages id="messages" closable="true" />
+
+                    <div class="form-grid two-cols">
+                        <div class="form-row full" style="display: flex; gap: 12px; align-items: end; flex-wrap: wrap;">
+                            <div style="flex: 0 0 180px;">
+                                <h:outputLabel for="searchType" value="Recherche par"/>
+                                <h:selectOneMenu id="searchType"
+                                                 value="#{modifierArchivesBean.searchType}">
+                                    <f:selectItem itemLabel="Pin" itemValue="pin"/>
+                                    <f:selectItem itemLabel="Relation" itemValue="relation"/>
+                                </h:selectOneMenu>
+                            </div>
+                            <div style="flex: 1 1 320px;">
+                                <h:outputLabel for="searchValue" value="Valeur"/>
+                                <p:inputText id="searchValue"
+                                             value="#{modifierArchivesBean.searchValue}"
+                                             placeholder="Saisir valeur"
+                                             autocomplete="off"
+                                             style="width: 100%"/>
+                            </div>
+                            <div class="modifier-actions" style="margin-top: 0;">
+                                <p:commandButton value="Rechercher"
+                                                 styleClass="modifier-btn"
+                                                 action="#{modifierArchivesBean.search}"
+                                                 process="@form"
+                                                 update="@form"/>
+                                <p:commandButton value="Effacer"
+                                                 styleClass="modifier-btn"
+                                                 action="#{modifierArchivesBean.clear}"
+                                                 process="@this"
+                                                 update="@form"/>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modifier-result #{modifierArchivesBean.resultLoaded ? 'modifier-ready' : 'modifier-empty'}">
+                        <div class="form-section-title">Informations client</div>
+                        <div class="form-grid two-cols">
+                            <div class="form-row">
+                                <h:outputLabel for="portefeuille" value="Portefeuille"/>
+                                <h:selectOneMenu id="portefeuille"
+                                                 value="#{modifierArchivesBean.portefeuille}"
+                                                 disabled="#{not modifierArchivesBean.resultLoaded}">
+                                    <f:selectItem itemLabel="Choisir" itemValue="#{null}" noSelectionOption="true"/>
+                                    <f:selectItem itemLabel="BTK - Cédé" itemValue="BTK - Cédé"/>
+                                    <f:selectItem itemLabel="BTK - Radié" itemValue="BTK - Radié"/>
+                                    <f:selectItem itemLabel="BTK - Géré" itemValue="BTK - Géré"/>
+                                    <f:selectItem itemLabel="BTK Leasing - Cédé" itemValue="BTK Leasing - Cédé"/>
+                                </h:selectOneMenu>
+                            </div>
+
+                            <div class="form-row">
+                                <h:outputLabel for="pin" value="Pin"/>
+                                <h:inputText id="pin"
+                                             value="#{modifierArchivesBean.pin}"
+                                             disabled="#{not modifierArchivesBean.resultLoaded}"/>
+                            </div>
+
+                            <div class="form-row">
+                                <h:outputLabel for="relation" value="Relation"/>
+                                <h:inputText id="relation"
+                                             value="#{modifierArchivesBean.relation}"
+                                             disabled="#{not modifierArchivesBean.resultLoaded}"/>
+                            </div>
+
+                            <div class="form-row">
+                                <h:outputLabel for="charge" value="Charge"/>
+                                <h:inputText id="charge"
+                                             value="#{modifierArchivesBean.charge}"
+                                             disabled="#{not modifierArchivesBean.resultLoaded}"/>
+                            </div>
+
+                            <div class="form-row">
+                                <h:outputLabel for="typeArchive" value="Type archive"/>
+                                <h:selectOneMenu id="typeArchive"
+                                                 value="#{modifierArchivesBean.typeArchive}"
+                                                 disabled="#{not modifierArchivesBean.resultLoaded}">
+                                    <f:selectItem itemLabel="Choisir" itemValue="#{null}" noSelectionOption="true"/>
+                                    <f:selectItem itemLabel="Courant" itemValue="courant"/>
+                                    <f:selectItem itemLabel="Intermediaire" itemValue="intermediaire"/>
+                                    <f:selectItem itemLabel="Finale" itemValue="finale"/>
+                                </h:selectOneMenu>
+                            </div>
+
+                            <div class="form-row">
+                                <h:outputLabel for="filialeId" value="Filiale"/>
+                                <h:selectOneMenu id="filialeId"
+                                                 value="#{modifierArchivesBean.filialeId}"
+                                                 disabled="#{not modifierArchivesBean.resultLoaded}">
+                                    <f:selectItem itemLabel="Choisir" itemValue="#{null}" noSelectionOption="true"/>
+                                    <f:selectItem itemLabel="BTK Bank" itemValue="btk-bank"/>
+                                    <f:selectItem itemLabel="BTK Finance" itemValue="btk-finance"/>
+                                </h:selectOneMenu>
+                            </div>
+
+                            <div class="form-row full">
+                                <div class="form-row-grid">
+                                    <div class="form-row small">
+                                        <h:outputLabel for="etage" value="Etage"/>
+                                        <h:selectOneMenu id="etage"
+                                                         value="#{modifierArchivesBean.etage}"
+                                                         disabled="#{not modifierArchivesBean.resultLoaded}">
+                                            <f:selectItem itemLabel="Choisir" itemValue="#{null}" noSelectionOption="true"/>
+                                            <f:selectItems value="#{modifierArchivesBean.etages}" var="item" itemLabel="#{item}" itemValue="#{item}"/>
+                                            <p:ajax listener="#{modifierArchivesBean.onEtageChange}" update="salle rayon rangee boite"/>
+                                        </h:selectOneMenu>
+                                    </div>
+                                    <div class="form-row small">
+                                        <h:outputLabel for="salle" value="Salle"/>
+                                        <h:selectOneMenu id="salle"
+                                                         value="#{modifierArchivesBean.salle}"
+                                                         disabled="#{not modifierArchivesBean.resultLoaded}">
+                                            <f:selectItem itemLabel="Choisir" itemValue="#{null}" noSelectionOption="true"/>
+                                            <f:selectItems value="#{modifierArchivesBean.salles}" var="item" itemLabel="#{item}" itemValue="#{item}"/>
+                                            <p:ajax listener="#{modifierArchivesBean.onSalleChange}" update="rayon rangee boite"/>
+                                        </h:selectOneMenu>
+                                    </div>
+                                    <div class="form-row small">
+                                        <h:outputLabel for="rayon" value="Rayon"/>
+                                        <h:selectOneMenu id="rayon"
+                                                         value="#{modifierArchivesBean.rayon}"
+                                                         disabled="#{not modifierArchivesBean.resultLoaded}">
+                                            <f:selectItem itemLabel="Choisir" itemValue="#{null}" noSelectionOption="true"/>
+                                            <f:selectItems value="#{modifierArchivesBean.rayons}" var="item" itemLabel="#{item}" itemValue="#{item}"/>
+                                            <p:ajax listener="#{modifierArchivesBean.onRayonChange}" update="rangee boite"/>
+                                        </h:selectOneMenu>
+                                    </div>
+                                    <div class="form-row small">
+                                        <h:outputLabel for="rangee" value="Range"/>
+                                        <h:selectOneMenu id="rangee"
+                                                         value="#{modifierArchivesBean.rangee}"
+                                                         disabled="#{not modifierArchivesBean.resultLoaded}">
+                                            <f:selectItem itemLabel="Choisir" itemValue="#{null}" noSelectionOption="true"/>
+                                            <f:selectItems value="#{modifierArchivesBean.rangees}" var="item" itemLabel="#{item}" itemValue="#{item}"/>
+                                            <p:ajax listener="#{modifierArchivesBean.onRangeeChange}" update="boite"/>
+                                        </h:selectOneMenu>
+                                    </div>
+                                    <div class="form-row small">
+                                        <h:outputLabel for="boite" value="Boite"/>
+                                        <h:selectOneMenu id="boite"
+                                                         value="#{modifierArchivesBean.boite}"
+                                                         disabled="#{not modifierArchivesBean.resultLoaded}">
+                                            <f:selectItem itemLabel="Choisir" itemValue="#{null}" noSelectionOption="true"/>
+                                            <f:selectItems value="#{modifierArchivesBean.boites}" var="item" itemLabel="#{item}" itemValue="#{item}"/>
+                                        </h:selectOneMenu>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modifier-actions">
+                        <p:commandButton value="Confirmer"
+                                         styleClass="modifier-btn"
+                                         type="button"
+                                         disabled="#{not modifierArchivesBean.resultLoaded}"
+                                         onclick="PF('confirmModificationDialog').show()"/>
+                    </div>
+
+                    <p:confirmDialog header="Confirmation"
+                                     widgetVar="confirmModificationDialog"
+                                     styleClass="modifier-confirm"
+                                     modal="true"
+                                     resizable="false"
+                                     appendTo="@(body)">
+                        <p:outputPanel style="margin-bottom: 12px;">
+                            Confirmer la modification du dossier ?
+                        </p:outputPanel>
+                        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                            <p:commandButton value="Oui"
+                                             styleClass="modifier-btn confirm-yes"
+                                             action="#{modifierArchivesBean.save}"
+                                             process="@form"
+                                             update="@form"
+                                             oncomplete="PF('confirmModificationDialog').hide()"/>
+                            <p:commandButton value="Annuler"
+                                             styleClass="modifier-btn confirm-no"
+                                             action="#{modifierArchivesBean.clear}"
+                                             process="@this"
+                                             update="@form"
+                                             oncomplete="PF('confirmModificationDialog').hide()"/>
+                        </div>
+                    </p:confirmDialog>
+
+                    <p:dialog header="Information"
+                              widgetVar="modifierNotFoundDialog"
+                              modal="true"
+                              resizable="false"
+                              closable="true"
+                              appendTo="@(body)">
+                        <h:outputText value="Aucun dossier trouve."/>
+                    </p:dialog>
+                </h:form>
+            </div>
+        </div>
+    </ui:define>
+
+</ui:composition>

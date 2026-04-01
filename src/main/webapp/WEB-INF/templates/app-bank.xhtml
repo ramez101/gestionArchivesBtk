@@ -1,0 +1,441 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+        "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="jakarta.faces.html"
+      xmlns:f="jakarta.faces.core"
+      xmlns:p="http://primefaces.org/ui"
+      xmlns:ui="jakarta.faces.facelets">
+
+<h:head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+    <title><ui:insert name="title">BTK</ui:insert></title>
+    <style>
+        :root {
+            --btk-primary: #007bae;
+            --btk-primary-2: #2aa6d9;
+            --btk-deep: #0b2f45;
+            --btk-ink: #132a3a;
+            --btk-bg: #f0f4f9;
+            --btk-card: #ffffff;
+            --btk-muted: #7a90a8;
+            --btk-border: #dce8f5;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--btk-bg);
+            min-height: 100vh;
+        }
+
+        /* Layout */
+        .app {
+            display: flex;
+            min-height: 100vh;
+            width: 100%;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: linear-gradient(180deg, var(--btk-primary) 0%, var(--btk-deep) 100%);
+            color: #e9f3ff;
+            padding: 18px 14px;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            transition: width .18s ease;
+        }
+
+        .sidebar.is-collapsed { width: 76px; }
+
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 25px 10px 16px;
+            border-bottom: 1px solid rgba(255,255,255,.12);
+            margin-bottom: 45px;
+        }
+
+        .sidebar-brand {
+            font-weight: 900;
+            letter-spacing: 4px;
+            font-size: 1.1rem;
+            white-space: nowrap;
+        }
+
+        .sidebar.is-collapsed .sidebar-brand { display: none; }
+
+        .nav {
+            display: grid;
+            gap: 15px;
+            padding: 8px 1px;
+            justify-content: center;
+        }
+
+        .nav a {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            color: #e9f3ff;
+            text-decoration: none;
+            border-radius: 10px;
+            background: rgba(255,255,255,.08);
+            border: 1px solid rgba(255,255,255,.10);
+            transition: transform .12s ease, background .12s ease;
+            white-space: nowrap;
+        }
+
+        .nav a:hover {
+            background: rgba(255,255,255,.14);
+            transform: translateY(-1px);
+        }
+
+        .nav .icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,.18);
+            flex: 0 0 auto;
+        }
+        .nav .icon svg { width: 18px; height: 18px; stroke: #e9f3ff; stroke-width: 2; fill: none; }
+        .nav .icon svg .fill { fill: #e9f3ff; stroke: none; }
+
+        .sidebar.is-collapsed .nav .label { display: none; }
+
+        /* Main */
+        .main {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            padding-top: 60px;
+        }
+
+        /* Navbar */
+        .navbar {
+            background: linear-gradient(135deg, var(--btk-deep) 0%, var(--btk-primary) 100%);
+            padding: 0 18px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 12px rgba(0,0,0,.25);
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 80;
+            width: 100%;
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
+
+        .hamburger {
+            width: 42px;
+            height: 42px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.15);
+            background: white;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            cursor: pointer;
+            transition: 0.3s ease;
+        }
+
+        .hamburger:hover { background: rgba(11, 146, 236, 0.18); }
+
+        .brand {
+            font-size: 1.1rem;
+            font-weight: 900;
+            color: #fff;
+            letter-spacing: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .nav-user {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            color: #cde0f5;
+            font-size: .88rem;
+        }
+
+        .btn-logout.ui-button {
+            padding: 7px 18px !important;
+            background: rgba(255,255,255,.15) !important;
+            border: 1.5px solid rgba(255,255,255,.4) !important;
+            border-radius: 6px !important;
+            color: #fff !important;
+            font-size: .82rem !important;
+            font-weight: 600 !important;
+            text-transform: uppercase !important;
+        }
+        .btn-logout.ui-button:hover { background: rgba(255,255,255,.28) !important; }
+
+        /* Content */
+        .container {
+            max-width: 860px;
+            margin: 48px auto;
+            padding: 0 20px;
+            width: 100%;
+        }
+
+        .welcome-banner {
+            background: linear-gradient(135deg, var(--btk-primary), var(--btk-primary-2));
+            border-radius: 12px;
+            padding: 28px 32px;
+            color: #fff;
+            margin-bottom: 28px;
+            box-shadow: 0 6px 24px rgba(0, 123, 174, .22);
+        }
+        .welcome-banner h1 { font-size: 1.55rem; font-weight: 700; margin-bottom: 4px; }
+        .welcome-banner p  { font-size: .88rem; opacity: .8; }
+
+        .card {
+            background: var(--btk-card);
+            border-radius: 12px;
+            padding: 32px;
+            box-shadow: 0 4px 20px rgba(0,0,0,.07);
+        }
+        .card-title {
+            font-size: .75rem;
+            font-weight: 700;
+            color: var(--btk-primary);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 24px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #e8f0fb;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 560px) { .info-grid { grid-template-columns: 1fr; } }
+
+        .info-item {
+            background: #f7fafd;
+            border: 1px solid var(--btk-border);
+            border-radius: 8px;
+            padding: 14px 18px;
+        }
+        .info-item .label {
+            font-size: .72rem;
+            font-weight: 700;
+            color: var(--btk-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+        .info-item .value {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--btk-ink);
+        }
+        .info-item .value.empty {
+            color: #bcc8d4;
+            font-style: italic;
+            font-weight: 400;
+        }
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: .82rem;
+            font-weight: 700;
+            background: #e8f0fb;
+            color: var(--btk-primary);
+        }
+
+        /* Secret fields (masked with reveal button) */
+        .secret-field {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+        }
+        .secret-field .secret-plain { display: none; }
+        .secret-field .secret-masked { letter-spacing: 2px; }
+        .secret-field.is-revealed .secret-plain { display: inline; }
+        .secret-field.is-revealed .secret-masked { display: none; }
+        .secret-toggle {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            border: 1px solid rgba(0,0,0,.10);
+            background: #f3f8ff;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+        .secret-toggle:hover { background: #eaf3ff; }
+        .secret-toggle svg { width: 18px; height: 18px; stroke: var(--btk-primary); stroke-width: 2; fill: none; }
+
+        /* Mobile drawer behavior */
+        .sidebar-scrim {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,.35);
+            z-index: 20;
+        }
+
+        @media (max-width: 780px) {
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                height: 100vh;
+                z-index: 30;
+                transform: translateX(-105%);
+                transition: transform .18s ease;
+                width: 280px;
+                box-shadow: 0 12px 50px rgba(0,0,0,.35);
+            }
+            .sidebar.is-open { transform: translateX(0); }
+            .sidebar.is-collapsed { width: 280px; }
+            .sidebar.is-collapsed .sidebar-brand { display: inline; }
+            .sidebar.is-collapsed .nav .label { display: inline; }
+            .sidebar-scrim.is-open { display: block; }
+        }
+    </style>
+</h:head>
+
+<h:body>
+    <!-- Session guard: redirect to login if not authenticated -->
+    <f:event type="preRenderView" listener="#{loginBean.checkSession}"/>
+
+    <div class="app">
+        <div id="sidebarScrim" class="sidebar-scrim is-open" onclick="BTKNav.close()"></div>
+
+        <aside id="sidebar" class="sidebar is-open" aria-label="Navigation">
+            <div class="sidebar-header">
+                <div class="sidebar-brand"></div>
+            </div>
+
+            <nav class="nav">
+                <h:link outcome="/dashboard2" styleClass="nav-item">
+                    <span class="icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false">
+                            <rect x="3" y="3" width="8" height="8" rx="2"/>
+                            <rect x="13" y="3" width="8" height="5" rx="2"/>
+                            <rect x="13" y="10" width="8" height="11" rx="2"/>
+                            <rect x="3" y="13" width="8" height="8" rx="2"/>
+                        </svg>
+                    </span>
+                    <span class="label">Tableau de bord</span>
+                </h:link>
+                <h:link outcome="/archives" styleClass="nav-item">
+                    <span class="icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false">
+                            <rect x="3" y="3" width="8" height="8" rx="2"/>
+                            <rect x="13" y="3" width="8" height="5" rx="2"/>
+                            <rect x="13" y="10" width="8" height="11" rx="2"/>
+                            <rect x="3" y="13" width="8" height="8" rx="2"/>
+                        </svg>
+                    </span>
+                    <span class="label">Archives</span>
+                </h:link>
+                <h:link outcome="/recouvrement" styleClass="nav-item">
+                    <span class="icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false">
+                            <path d="M3 7h18"/>
+                            <path d="M7 12h10"/>
+                            <path d="M9 17h6"/>
+                        </svg>
+                    </span>
+                    <span class="label">Recouvrement</span>
+                </h:link>
+            </nav>
+        </aside>
+
+        <section class="main">
+            <div class="navbar">
+                <div class="nav-left">
+                    <button type="button" class="hamburger" onclick="BTKNav.toggle()" aria-label="Menu">≡</button>
+                    <span class="brand">BTK Bank - Archives</span>
+                </div>
+                <div class="nav-user">
+                    <span>Connecté : <strong>#{loginBean.utilisateur.unix}</strong></span>
+                    <h:form>
+                        <p:commandButton value="Déconnexion"
+                                         action="#{loginBean.logout}"
+                                         styleClass="btn-logout"
+                                         ajax="false"/>
+                    </h:form>
+                </div>
+            </div>
+
+            <ui:insert name="content"/>
+        </section>
+    </div>
+
+    <script type="text/javascript">
+        (function () {
+            function isMobile() { return window.matchMedia &amp;&amp; window.matchMedia('(max-width: 780px)').matches; }
+            function sidebarEl() { return document.getElementById('sidebar'); }
+            function scrimEl() { return document.getElementById('sidebarScrim'); }
+
+            window.BTKNav = {
+                toggle: function () {
+                    var sidebar = sidebarEl();
+                    if (!sidebar) return;
+
+                    if (isMobile()) {
+                        sidebar.classList.toggle('is-open');
+                        var scrim = scrimEl();
+                        if (scrim) scrim.classList.toggle('is-open', sidebar.classList.contains('is-open'));
+                        return;
+                    }
+
+                    sidebar.classList.toggle('is-collapsed');
+                },
+                close: function () {
+                    var sidebar = sidebarEl();
+                    var scrim = scrimEl();
+                    if (sidebar) sidebar.classList.remove('is-open');
+                    if (scrim) scrim.classList.remove('is-open');
+                }
+            };
+
+            window.BTKSecrets = {
+                toggle: function (btn) {
+                    if (!btn) return;
+                    var root = btn.closest ? btn.closest('.secret-field') : null;
+                    if (!root) return;
+                    root.classList.toggle('is-revealed');
+                }
+            };
+
+            // Default: menu open (expanded) on load.
+            // On desktop, ensure it's not collapsed.
+            var sidebar = sidebarEl();
+            if (sidebar &amp;&amp; !isMobile()) sidebar.classList.remove('is-collapsed');
+        })();
+    </script>
+</h:body>
+</html>

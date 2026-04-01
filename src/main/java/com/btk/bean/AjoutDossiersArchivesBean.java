@@ -1,0 +1,510 @@
+package com.btk.bean;
+
+import java.io.InputStream;
+import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+
+import com.btk.model.ArchDossier;
+import com.btk.model.ArchEmplacement;
+
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.Resource;
+import jakarta.faces.application.FacesMessage;
+import jakarta.faces.context.FacesContext;
+import jakarta.faces.view.ViewScoped;
+import jakarta.inject.Named;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.Persistence;
+import jakarta.transaction.UserTransaction;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.Part;
+import jakarta.json.Json;
+import jakarta.json.JsonArray;
+import jakarta.json.JsonObject;
+import jakarta.json.JsonReader;
+import jakarta.inject.Inject;
+
+@Named("ajoutDossiersArchivesBean")
+@ViewScoped
+public class AjoutDossiersArchivesBean implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+    private static final Path DOCUMENTS_ROOT = Paths.get("C:\\Documents_Archives");
+
+    private static EntityManagerFactory emf;
+
+    @Resource
+    private UserTransaction utx;
+
+    private Long nextDossierId;
+    private Integer boite;
+    private List<Integer> boites = Collections.emptyList();
+    private String docsPayload;
+
+    @Inject
+    private LoginBean loginBean;
+
+    private String portefeuille;
+    private String pin;
+    private String relation;
+    private String charge;
+    private String typeArchive;
+    private String filialeId;
+
+    @PostConstruct
+    public void init() {
+        refreshNextDossierId();
+        boites = fetchBoites();
+    }
+
+    public void save() {
+        EntityManager em = getEMF().createEntityManager();
+        try {
+            utx.begin();
+            em.joinTransaction();
+
+            if (pin != null && !pin.isBlank()) {
+                Long existing = em.createQuery(
+                                "select count(d) from " + ArchDossier.class.getSimpleName() + " d " +
+                                        "where upper(trim(d.pin)) = :pin",
+                                Long.class)
+                        .setParameter("pin", pin.trim().toUpperCase())
+                        .getSingleResult();
+                if (existing != null && existing > 0) {
+                    utx.rollback();
+                    FacesContext.getCurrentInstance()
+                            .addMessage(null, new FacesMessage(FacesMessage.SEVERITY_WARN,
+                                    "Pin deja utilise.", null));
+                    return;
+                }
+            }
+
+            Integer emplacementId = findEmplacementId(em);
+            if (emplacementId == null) {
+                throw new IllegalStateException("Emplacement introuvable.");
+            }
+
+            ArchDossier dossier = new ArchDossier();
+            dossier.setPortefeuille(portefeuille);
+            dossier.setPin(pin);
+            dossier.setRelation(relation);
+            dossier.setCharge(charge);
+            dossier.setTypeArchive(typeArchive);
+            dossier.setIdFiliale(filialeId);
+            dossier.setIdEmplacement(emplacementId);
+
+            em.persist(dossier);
+            em.flush();
+
+            int docsSaved = saveDocuments(em, dossier);
+
+            utx.commit();
+            resetForm();
+            FacesContext.getCurrentInstance()
+                    .addMessage(null, new FacesMessage(FacesMessage.SEVERITY_INFO,
+                            "Dossier enregistre avec succes. Documents sauvegardes: " + docsSaved + ".", null));
+        } catch (Exception e) {
+            try { if (utx != null) utx.rollback(); } catch (Exception ignored) {}
+            FacesContext.getCurrentInstance()
+                    .addMessage(null, new FacesMessage(FacesMessage.SEVERITY_ERROR,
+                            "Erreur enregistrement : " + e.getMessage(), null));
+        } finally {
+            em.close();
+        }
+    }
+
+    private void resetForm() {
+        portefeuille = null;
+        pin = null;
+        relation = null;
+        charge = null;
+        typeArchive = null;
+        filialeId = null;
+
+        boite = null;
+        refreshNextDossierId();
+        boites = fetchBoites();
+        docsPayload = null;
+    }
+
+    private void refreshNextDossierId() {
+        EntityManager em = getEMF().createEntityManager();
+        try {
+            Long maxId = em.createQuery(
+                            "select max(d.idDossier) from " + ArchDossier.class.getSimpleName() + " d",
+                            Long.class)
+                    .getSingleResult();
+            nextDossierId = (maxId == null) ? 1L : maxId + 1L;
+        } finally {
+            em.close();
+        }
+    }
+
+    private Integer findEmplacementId(EntityManager em) {
+        if (boite == null) {
+            return null;
+        }
+        List<Integer> ids = em.createQuery(
+                        "select e.idEmplacement from ArchEmplacement e where e.boite = :boite",
+                        Integer.class)
+                .setParameter("boite", boite)
+                .setMaxResults(1)
+                .getResultList();
+
+        return ids.isEmpty() ? null : ids.get(0);
+    }
+
+    private List<Integer> fetchBoites() {
+        EntityManager em = getEMF().createEntityManager();
+        try {
+            return em.createQuery(
+                            "select distinct e.boite from " + ArchEmplacement.class.getSimpleName() + " e " +
+                                    "order by e.boite",
+                            Integer.class)
+                    .getResultList();
+        } finally {
+            em.close();
+        }
+    }
+
+    public List<Integer> completeBoite(String query) {
+        if (boites == null || boites.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        String term = query == null ? "" : query.trim();
+        if (term.isBlank()) {
+            return boites;
+        }
+
+        List<Integer> result = new ArrayList<>();
+        for (Integer item : boites) {
+            if (item == null) {
+                continue;
+            }
+            if (String.valueOf(item).contains(term)) {
+                result.add(item);
+            }
+        }
+        return result;
+    }
+
+    private static synchronized EntityManagerFactory getEMF() {
+        if (emf == null || !emf.isOpen()) {
+            emf = Persistence.createEntityManagerFactory("btk");
+        }
+        return emf;
+    }
+
+    public Integer getBoite() { return boite; }
+    public void setBoite(Integer boite) { this.boite = boite; }
+
+    public Long getNextDossierId() { return nextDossierId; }
+    public List<Integer> getBoites() { return boites; }
+
+    public String getDocsPayload() { return docsPayload; }
+    public void setDocsPayload(String docsPayload) { this.docsPayload = docsPayload; }
+
+    private int saveDocuments(EntityManager em, ArchDossier dossier) throws Exception {
+        String payload = resolveDocsPayload();
+        List<DocItem> docs = parseDocsPayload(payload);
+        Map<String, Part> parts = collectParts();
+
+        if (docs.isEmpty() && parts.isEmpty()) {
+            return 0;
+        }
+        if (docs.isEmpty()) {
+            docs = buildDocsFromParts(parts);
+        }
+
+        String dossierName = buildDossierName(dossier);
+        Files.createDirectories(DOCUMENTS_ROOT);
+        Path dossierPath = DOCUMENTS_ROOT.resolve(dossierName);
+        Files.createDirectories(dossierPath);
+
+        if (parts.isEmpty()) {
+            throw new IllegalStateException("Aucun fichier n'a ete recu par le serveur.");
+        }
+        long nextDocId = fetchNextDocId(em);
+        int savedCount = 0;
+        List<String> usedPartNames = new ArrayList<>();
+        List<DocItem> savedDocsMeta = new ArrayList<>();
+
+        for (DocItem doc : docs) {
+            Part part = resolvePart(doc, parts, usedPartNames);
+            String fileName = doc.file;
+            if (part == null) {
+                throw new IllegalStateException("Fichier introuvable pour le document : " + doc.label);
+            }
+
+            String submitted = part.getSubmittedFileName();
+            if (submitted != null && !submitted.isBlank()) {
+                fileName = Paths.get(submitted).getFileName().toString();
+            }
+
+            Path target = dossierPath.resolve(sanitizeFileName(fileName));
+            try (InputStream in = part.getInputStream()) {
+                Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            em.createNativeQuery(
+                            "insert into ARCH_DOCUMENT (ID_DOCUMENT, NOM_DOSSIER, PATH_DOSSIER, DOCUMENTS, BOITE, UTILISATEUR_CREE, DATE_CREATION) " +
+                                    "values (:id, :nom, :path, :docs, :boite, :user, SYSDATE)")
+                    .setParameter("id", nextDocId++)
+                    .setParameter("nom", dossierName)
+                    .setParameter("path", dossierPath.toString())
+                    .setParameter("docs", fileName)
+                    .setParameter("boite", boite)
+                    .setParameter("user", resolveUtilisateur())
+                    .executeUpdate();
+            savedDocsMeta.add(new DocItem(
+                    doc.label,
+                    doc.copie,
+                    doc.nombre,
+                    doc.desc,
+                    fileName,
+                    doc.fileKey
+            ));
+            savedCount++;
+        }
+        writeMetadataFile(dossierPath, savedDocsMeta);
+
+        return savedCount;
+    }
+
+    private void writeMetadataFile(Path dossierPath, List<DocItem> docs) throws Exception {
+        var arrayBuilder = Json.createArrayBuilder();
+        for (DocItem doc : docs) {
+            arrayBuilder.add(Json.createObjectBuilder()
+                    .add("file", safeJsonValue(doc.file))
+                    .add("nomDocument", safeJsonValue(doc.label))
+                    .add("copie", safeJsonValue(doc.copie))
+                    .add("nombre", safeJsonValue(doc.nombre))
+                    .add("description", safeJsonValue(doc.desc))
+                    .build());
+        }
+        Files.writeString(dossierPath.resolve("_metadata.json"),
+                arrayBuilder.build().toString(),
+                StandardCharsets.UTF_8);
+    }
+
+    private String safeJsonValue(String value) {
+        return value == null ? "" : value;
+    }
+
+    private List<DocItem> buildDocsFromParts(Map<String, Part> parts) {
+        if (parts.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Entry<String, Part>> entries = new ArrayList<>(parts.entrySet());
+        entries.sort(Comparator.comparing(Entry::getKey));
+
+        List<DocItem> docs = new ArrayList<>(entries.size());
+        for (Entry<String, Part> entry : entries) {
+            Part part = entry.getValue();
+            String fileName = part.getSubmittedFileName();
+            if (fileName != null && !fileName.isBlank()) {
+                fileName = Paths.get(fileName).getFileName().toString();
+            } else {
+                fileName = entry.getKey();
+            }
+
+            docs.add(new DocItem(fileName, "", "", "", fileName, entry.getKey()));
+        }
+
+        return docs;
+    }
+
+    private Part resolvePart(DocItem doc, Map<String, Part> parts, List<String> usedPartNames) {
+        if (doc.fileKey != null && !doc.fileKey.isBlank()) {
+            Part keyedPart = parts.get(doc.fileKey);
+            if (keyedPart != null && !usedPartNames.contains(doc.fileKey)) {
+                usedPartNames.add(doc.fileKey);
+                return keyedPart;
+            }
+        }
+
+        if (doc.file != null && !doc.file.isBlank()) {
+            for (Entry<String, Part> entry : parts.entrySet()) {
+                String key = entry.getKey();
+                if (usedPartNames.contains(key)) {
+                    continue;
+                }
+
+                Part part = entry.getValue();
+                String submitted = part.getSubmittedFileName();
+                if (submitted == null || submitted.isBlank()) {
+                    continue;
+                }
+
+                String submittedName = Paths.get(submitted).getFileName().toString();
+                if (submittedName.equalsIgnoreCase(doc.file)) {
+                    usedPartNames.add(key);
+                    return part;
+                }
+            }
+        }
+
+        for (Entry<String, Part> entry : parts.entrySet()) {
+            String key = entry.getKey();
+            if (usedPartNames.contains(key)) {
+                continue;
+            }
+            usedPartNames.add(key);
+            return entry.getValue();
+        }
+
+        return null;
+    }
+    private String resolveDocsPayload() {
+        HttpServletRequest request = (HttpServletRequest) FacesContext.getCurrentInstance()
+                .getExternalContext().getRequest();
+        String requestPayload = request.getParameter("docsPayload");
+        if (requestPayload != null && !requestPayload.isBlank()) {
+            return requestPayload;
+        }
+        try {
+            Part payloadPart = request.getPart("docsPayload");
+            if (payloadPart != null && payloadPart.getSize() > 0) {
+                try (InputStream in = payloadPart.getInputStream()) {
+                    String partPayload = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                    if (!partPayload.isBlank()) {
+                        return partPayload;
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            // Fallback to the JSF-bound value below.
+        }
+        return docsPayload;
+    }
+
+    private List<DocItem> parseDocsPayload(String payload) {
+        if (payload == null || payload.isBlank()) {
+            return Collections.emptyList();
+        }
+        try (JsonReader reader = Json.createReader(new java.io.StringReader(payload))) {
+            JsonArray arr = reader.readArray();
+            List<DocItem> items = new ArrayList<>();
+            for (var value : arr) {
+                if (!(value instanceof JsonObject)) {
+                    continue;
+                }
+                JsonObject obj = (JsonObject) value;
+                items.add(new DocItem(
+                        obj.getString("label", ""),
+                        obj.getString("copie", ""),
+                        obj.getString("nombre", ""),
+                        obj.getString("desc", ""),
+                        obj.getString("file", ""),
+                        obj.getString("fileKey", "")
+                ));
+            }
+            return items;
+        }
+    }
+
+    private Map<String, Part> collectParts() throws Exception {
+        Map<String, Part> map = new HashMap<>();
+        HttpServletRequest request = (HttpServletRequest) FacesContext.getCurrentInstance()
+                .getExternalContext().getRequest();
+        for (Part part : request.getParts()) {
+            String submitted = part.getSubmittedFileName();
+            if (submitted == null || submitted.isBlank() || part.getSize() <= 0) {
+                continue;
+            }
+            map.put(part.getName(), part);
+        }
+        return map;
+    }
+
+    private long fetchNextDocId(EntityManager em) {
+        Object max = em.createNativeQuery("select max(id_document) from ARCH_DOCUMENT").getSingleResult();
+        if (max instanceof Number) {
+            return ((Number) max).longValue() + 1L;
+        }
+        return 1L;
+    }
+
+    private String buildDossierName(ArchDossier dossier) {
+        String relationValue = dossier.getRelation() == null ? "" : dossier.getRelation().trim();
+        String pinValue = dossier.getPin() == null ? "" : dossier.getPin().trim();
+        String base = "Dossier num " + dossier.getIdDossier() + " : " + relationValue + "-" + pinValue;
+        return sanitizeFolderName(base);
+    }
+
+    private String sanitizeFolderName(String value) {
+        if (value == null) {
+            return "Dossier";
+        }
+        return value.replaceAll("[\\\\/:*?\"<>|]", "-").trim();
+    }
+
+    private String sanitizeFileName(String value) {
+        if (value == null) {
+            return "document";
+        }
+        return value.replaceAll("[\\\\/:*?\"<>|]", "-").trim();
+    }
+
+    private String resolveUtilisateur() {
+        if (loginBean != null && loginBean.getUtilisateur() != null) {
+            String unix = loginBean.getUtilisateur().getUnix();
+            if (unix != null && !unix.isBlank()) {
+                return unix;
+            }
+        }
+        return "unknown";
+    }
+
+    private static class DocItem {
+        final String label;
+        final String copie;
+        final String nombre;
+        final String desc;
+        final String file;
+        final String fileKey;
+
+        DocItem(String label, String copie, String nombre, String desc, String file, String fileKey) {
+            this.label = label;
+            this.copie = copie;
+            this.nombre = nombre;
+            this.desc = desc;
+            this.file = file;
+            this.fileKey = fileKey;
+        }
+    }
+
+    public String getPortefeuille() { return portefeuille; }
+    public void setPortefeuille(String portefeuille) { this.portefeuille = portefeuille; }
+
+    public String getPin() { return pin; }
+    public void setPin(String pin) { this.pin = pin; }
+
+    public String getRelation() { return relation; }
+    public void setRelation(String relation) { this.relation = relation; }
+
+    public String getCharge() { return charge; }
+    public void setCharge(String charge) { this.charge = charge; }
+
+    public String getTypeArchive() { return typeArchive; }
+    public void setTypeArchive(String typeArchive) { this.typeArchive = typeArchive; }
+
+    public String getFilialeId() { return filialeId; }
+    public void setFilialeId(String filialeId) { this.filialeId = filialeId; }
+
+}
+
