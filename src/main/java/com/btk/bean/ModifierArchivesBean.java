@@ -1,12 +1,16 @@
 package com.btk.bean;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
 import com.btk.model.ArchDossier;
+import com.btk.model.ArchEmplacement;
+import com.btk.util.DossierEmpUtil;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
@@ -38,7 +42,6 @@ public class ModifierArchivesBean implements Serializable {
     private String searchValue;
 
     private Long dossierId;
-    private Integer emplacementId;
     private boolean resultLoaded;
 
     private String portefeuille;
@@ -47,17 +50,16 @@ public class ModifierArchivesBean implements Serializable {
     private String charge;
     private String typeArchive;
     private String filialeId;
-    private Integer etage;
-    private Integer salle;
-    private Integer rayon;
-    private Integer rangee;
     private Integer boite;
+    private Integer boiteToRemove;
+    private List<Integer> selectedBoites = new ArrayList<>();
 
-    private List<Integer> etages = Collections.emptyList();
-    private List<Integer> salles = Collections.emptyList();
-    private List<Integer> rayons = Collections.emptyList();
-    private List<Integer> rangees = Collections.emptyList();
     private List<Integer> boites = Collections.emptyList();
+
+    @PostConstruct
+    public void init() {
+        boites = fetchBoites();
+    }
 
     public void search() {
         clearResult();
@@ -88,7 +90,6 @@ public class ModifierArchivesBean implements Serializable {
 
             ArchDossier dossier = rows.get(0);
             dossierId = dossier.getIdDossier();
-            emplacementId = dossier.getIdEmplacement();
             portefeuille = dossier.getPortefeuille();
             pin = dossier.getPin();
             relation = dossier.getRelation();
@@ -97,18 +98,10 @@ public class ModifierArchivesBean implements Serializable {
             filialeId = dossier.getIdFiliale();
             resultLoaded = true;
 
-            if (emplacementId != null) {
-                var emp = em.find(com.btk.model.ArchEmplacement.class, emplacementId);
-                if (emp != null) {
-                    etage = emp.getEtage();
-                    salle = emp.getSalle();
-                    rayon = emp.getRayon();
-                    rangee = emp.getRangee();
-                    boite = emp.getBoite();
-                }
-            }
-
-            loadEmplacementLists(em);
+            selectedBoites = new ArrayList<>(DossierEmpUtil.findBoitesByDossierId(em, dossierId));
+            boite = null;
+            boiteToRemove = null;
+            boites = fetchBoites();
 
             PrimeFaces.current().executeScript("PF('modifierNotFoundDialog').hide()");
         } finally {
@@ -125,11 +118,19 @@ public class ModifierArchivesBean implements Serializable {
         EntityManager em = getEMF().createEntityManager();
         boolean txStarted = false;
         try {
-            Integer newEmplacementId = findEmplacementId(em);
-            if (newEmplacementId == null) {
-                addError("Emplacement introuvable.");
+            List<Integer> boitesToSave = DossierEmpUtil.normalizeBoites(resolveBoitesToSave());
+            if (boitesToSave.isEmpty()) {
+                addWarn("Ajouter au moins une boite.");
                 markValidationFailed();
                 return;
+            }
+
+            for (Integer boiteValue : boitesToSave) {
+                if (!DossierEmpUtil.boiteExists(em, boiteValue)) {
+                    addError("La boite " + boiteValue + " est introuvable.");
+                    markValidationFailed();
+                    return;
+                }
             }
 
             utx.begin();
@@ -149,8 +150,8 @@ public class ModifierArchivesBean implements Serializable {
             dossier.setCharge(charge);
             dossier.setTypeArchive(typeArchive);
             dossier.setIdFiliale(filialeId);
-            dossier.setIdEmplacement(newEmplacementId);
 
+            DossierEmpUtil.replaceBoites(em, dossierId, pin, relation, boitesToSave);
             em.flush();
 
             utx.commit();
@@ -184,7 +185,6 @@ public class ModifierArchivesBean implements Serializable {
 
     private void clearResult() {
         dossierId = null;
-        emplacementId = null;
         resultLoaded = false;
         portefeuille = null;
         pin = null;
@@ -192,56 +192,72 @@ public class ModifierArchivesBean implements Serializable {
         charge = null;
         typeArchive = null;
         filialeId = null;
-        etage = null;
-        salle = null;
-        rayon = null;
-        rangee = null;
         boite = null;
-
-        etages = fetchDistinct(null, "etage");
-        salles = Collections.emptyList();
-        rayons = Collections.emptyList();
-        rangees = Collections.emptyList();
-        boites = Collections.emptyList();
+        boiteToRemove = null;
+        selectedBoites = new ArrayList<>();
+        boites = fetchBoites();
     }
 
     private String normalizeSearchValue(String value) {
         return value == null ? null : value.trim().toUpperCase(Locale.ROOT);
     }
 
-    public void onEtageChange() {
-        salle = null;
-        rayon = null;
-        rangee = null;
-        boite = null;
+    public List<Integer> completeBoite(String query) {
+        if (boites == null || boites.isEmpty()) {
+            return Collections.emptyList();
+        }
 
-        salles = fetchDistinct("etage = :etage", "salle");
-        rayons = Collections.emptyList();
-        rangees = Collections.emptyList();
-        boites = Collections.emptyList();
+        String term = query == null ? "" : query.trim();
+        if (term.isBlank()) {
+            return boites;
+        }
+
+        List<Integer> result = new ArrayList<>();
+        for (Integer item : boites) {
+            if (item == null) {
+                continue;
+            }
+            if (String.valueOf(item).contains(term)) {
+                result.add(item);
+            }
+        }
+        return result;
     }
 
-    public void onSalleChange() {
-        rayon = null;
-        rangee = null;
-        boite = null;
+    public void addBoiteSelection() {
+        if (boite == null) {
+            addWarn("Saisir un numero de boite avant d'ajouter.");
+            markValidationFailed();
+            return;
+        }
 
-        rayons = fetchDistinct("etage = :etage and salle = :salle", "rayon");
-        rangees = Collections.emptyList();
-        boites = Collections.emptyList();
+        if (boites == null || !boites.contains(boite)) {
+            addError("La boite " + boite + " est introuvable.");
+            markValidationFailed();
+            return;
+        }
+
+        if (selectedBoites.contains(boite)) {
+            addWarn("La boite " + boite + " est deja associee.");
+            boite = null;
+            markValidationFailed();
+            return;
+        }
+
+        selectedBoites.add(boite);
+        selectedBoites = new ArrayList<>(DossierEmpUtil.normalizeBoites(selectedBoites));
+        addInfo("Boite " + boite + " ajoutee.");
+        boite = null;
     }
 
-    public void onRayonChange() {
-        rangee = null;
-        boite = null;
+    public void removeBoiteSelection() {
+        if (boiteToRemove == null) {
+            return;
+        }
 
-        rangees = fetchDistinct("etage = :etage and salle = :salle and rayon = :rayon", "rangee");
-        boites = Collections.emptyList();
-    }
-
-    public void onRangeeChange() {
-        boite = null;
-        boites = fetchDistinct("etage = :etage and salle = :salle and rayon = :rayon and rangee = :rangee", "boite");
+        selectedBoites.remove(boiteToRemove);
+        addInfo("Boite " + boiteToRemove + " retiree.");
+        boiteToRemove = null;
     }
 
     private void addInfo(String message) {
@@ -263,76 +279,25 @@ public class ModifierArchivesBean implements Serializable {
         FacesContext.getCurrentInstance().validationFailed();
     }
 
-    private Integer findEmplacementId(EntityManager em) {
-        if (etage == null || salle == null || rayon == null || rangee == null || boite == null) {
-            return null;
+    private List<Integer> resolveBoitesToSave() {
+        List<Integer> resolved = new ArrayList<>(selectedBoites);
+        if (boite != null && !resolved.contains(boite)) {
+            resolved.add(boite);
         }
-        List<Integer> ids = em.createQuery(
-                        "select e.idEmplacement from com.btk.model.ArchEmplacement e " +
-                                "where e.etage = :etage and e.salle = :salle and e.rayon = :rayon " +
-                                "and e.rangee = :rangee and e.boite = :boite",
-                        Integer.class)
-                .setParameter("etage", etage)
-                .setParameter("salle", salle)
-                .setParameter("rayon", rayon)
-                .setParameter("rangee", rangee)
-                .setParameter("boite", boite)
-                .setMaxResults(1)
-                .getResultList();
-
-        return ids.isEmpty() ? null : ids.get(0);
+        return resolved;
     }
 
-    private void loadEmplacementLists(EntityManager em) {
-        etages = em.createQuery("select distinct e.etage from com.btk.model.ArchEmplacement e order by e.etage",
-                Integer.class).getResultList();
-
-        salles = (etage == null) ? Collections.emptyList()
-                : fetchDistinct(em, "etage = :etage", "salle");
-        rayons = (salle == null) ? Collections.emptyList()
-                : fetchDistinct(em, "etage = :etage and salle = :salle", "rayon");
-        rangees = (rayon == null) ? Collections.emptyList()
-                : fetchDistinct(em, "etage = :etage and salle = :salle and rayon = :rayon", "rangee");
-        boites = (rangee == null) ? Collections.emptyList()
-                : fetchDistinct(em, "etage = :etage and salle = :salle and rayon = :rayon and rangee = :rangee", "boite");
-    }
-
-    private List<Integer> fetchDistinct(String whereClause, String field) {
+    private List<Integer> fetchBoites() {
         EntityManager em = getEMF().createEntityManager();
         try {
-            return fetchDistinct(em, whereClause, field);
+            return em.createQuery(
+                            "select distinct e.boite from " + ArchEmplacement.class.getSimpleName() + " e " +
+                                    "order by e.boite",
+                            Integer.class)
+                    .getResultList();
         } finally {
             em.close();
         }
-    }
-
-    private List<Integer> fetchDistinct(EntityManager em, String whereClause, String field) {
-        StringBuilder jpql = new StringBuilder("select distinct e.")
-                .append(field)
-                .append(" from com.btk.model.ArchEmplacement e");
-
-        if (whereClause != null && !whereClause.isBlank()) {
-            jpql.append(" where ").append(whereClause);
-        }
-
-        jpql.append(" order by e.").append(field);
-
-        var query = em.createQuery(jpql.toString(), Integer.class);
-
-        if (whereClause != null && whereClause.contains(":etage")) {
-            query.setParameter("etage", etage);
-        }
-        if (whereClause != null && whereClause.contains(":salle")) {
-            query.setParameter("salle", salle);
-        }
-        if (whereClause != null && whereClause.contains(":rayon")) {
-            query.setParameter("rayon", rayon);
-        }
-        if (whereClause != null && whereClause.contains(":rangee")) {
-            query.setParameter("rangee", rangee);
-        }
-
-        return query.getResultList();
     }
 
     private static synchronized EntityManagerFactory getEMF() {
@@ -368,24 +333,12 @@ public class ModifierArchivesBean implements Serializable {
     public String getFilialeId() { return filialeId; }
     public void setFilialeId(String filialeId) { this.filialeId = filialeId; }
 
-    public Integer getEtage() { return etage; }
-    public void setEtage(Integer etage) { this.etage = etage; }
-
-    public Integer getSalle() { return salle; }
-    public void setSalle(Integer salle) { this.salle = salle; }
-
-    public Integer getRayon() { return rayon; }
-    public void setRayon(Integer rayon) { this.rayon = rayon; }
-
-    public Integer getRangee() { return rangee; }
-    public void setRangee(Integer rangee) { this.rangee = rangee; }
-
     public Integer getBoite() { return boite; }
     public void setBoite(Integer boite) { this.boite = boite; }
 
-    public List<Integer> getEtages() { return etages; }
-    public List<Integer> getSalles() { return salles; }
-    public List<Integer> getRayons() { return rayons; }
-    public List<Integer> getRangees() { return rangees; }
     public List<Integer> getBoites() { return boites; }
+    public List<Integer> getSelectedBoites() { return selectedBoites; }
+    public Integer getBoiteToRemove() { return boiteToRemove; }
+    public void setBoiteToRemove(Integer boiteToRemove) { this.boiteToRemove = boiteToRemove; }
+    public String getBoitesSummary() { return DossierEmpUtil.formatBoites(resolveBoitesToSave()); }
 }

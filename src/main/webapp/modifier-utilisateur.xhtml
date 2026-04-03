@@ -44,7 +44,8 @@
                 <div class="card-title">Parametres - Modifier utilisateur</div>
 
                 <h:form id="modifierUserForm" prependId="false">
-                    <p:messages id="messagesMod" showSummary="false" showDetail="true" closable="true"/>
+                    <p:defaultCommand target="searchModifierUserBtn"/>
+                    <p:messages id="messagesMod" showSummary="true" showDetail="false" closable="true"/>
 
                     <div class="user-form-shell">
                         <div class="form-grid two-cols">
@@ -66,9 +67,10 @@
                         </div>
 
                         <div class="user-form-actions" style="margin-top: 14px;">
-                            <p:commandButton value="Rechercher"
+                            <p:commandButton id="searchModifierUserBtn"
+                                             value="Rechercher"
                                              action="#{ajouterUtilisateurBean.searchForUpdate}"
-                                             process="modSearchType modSearchValue"
+                                             process="@this modSearchType modSearchValue"
                                              update="@form"
                                              styleClass="btn-primary"/>
                         </div>
@@ -145,9 +147,10 @@
                         </div>
 
                         <div class="user-form-actions">
-                            <p:commandButton value="Valider"
+                            <p:commandButton id="updateModifierUserBtn"
+                                             value="Valider"
                                              action="#{ajouterUtilisateurBean.update}"
-                                             process="modCuti modUnix modLib modAge modPuti modRole"
+                                             process="@this modCuti modUnix modLib modAge modPuti modRole"
                                              update="@form"
                                              disabled="#{not ajouterUtilisateurBean.modResultLoaded}"
                                              styleClass="btn-primary"/>

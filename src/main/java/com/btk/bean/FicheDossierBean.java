@@ -20,6 +20,7 @@ import org.primefaces.PrimeFaces;
 
 import com.btk.model.ArchDossier;
 import com.btk.model.ArchEmplacement;
+import com.btk.util.DossierEmpUtil;
 import com.lowagie.text.Document;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
@@ -71,7 +72,7 @@ public class FicheDossierBean implements Serializable {
     private Integer salle;
     private Integer rayon;
     private Integer rangee;
-    private Integer boite;
+    private String boite;
     private boolean resultLoaded;
     private List<FicheDocumentRow> documents = Collections.emptyList();
 
@@ -90,37 +91,35 @@ public class FicheDossierBean implements Serializable {
             boolean byRelation = "relation".equalsIgnoreCase(searchType);
             String field = byRelation ? "relation" : "pin";
 
-            TypedQuery<Object[]> query = em.createQuery(
-                    "select d.idDossier, d.portefeuille, d.pin, d.relation, d.charge, d.typeArchive, d.idFiliale, " +
-                            "e.etage, e.salle, e.rayon, e.rangee, e.boite " +
-                            "from " + ArchDossier.class.getSimpleName() + " d, " +
-                            ArchEmplacement.class.getSimpleName() + " e " +
-                            "where d.idEmplacement = e.idEmplacement " +
-                            "and upper(trim(d." + field + ")) = :searchValue " +
+            TypedQuery<ArchDossier> query = em.createQuery(
+                    "select d from " + ArchDossier.class.getSimpleName() + " d " +
+                            "where upper(trim(d." + field + ")) = :searchValue " +
                             "order by d.idDossier",
-                    Object[].class);
+                    ArchDossier.class);
             query.setParameter("searchValue", normalizeSearchValue(effectiveValue));
             query.setMaxResults(1);
 
-            List<Object[]> rows = query.getResultList();
+            List<ArchDossier> rows = query.getResultList();
             if (rows.isEmpty()) {
                 PrimeFaces.current().executeScript("PF('ficheNotFoundDialog').show()");
                 return;
             }
 
-            Object[] row = rows.get(0);
-            idDossier = row[0] instanceof Number ? ((Number) row[0]).longValue() : null;
-            portefeuille = (String) row[1];
-            pin = (String) row[2];
-            relation = (String) row[3];
-            charge = (String) row[4];
-            typeArchive = toTypeArchiveLabel((String) row[5]);
-            filiale = toFilialeLabel((String) row[6]);
-            etage = row[7] instanceof Number ? ((Number) row[7]).intValue() : null;
-            salle = row[8] instanceof Number ? ((Number) row[8]).intValue() : null;
-            rayon = row[9] instanceof Number ? ((Number) row[9]).intValue() : null;
-            rangee = row[10] instanceof Number ? ((Number) row[10]).intValue() : null;
-            boite = row[11] instanceof Number ? ((Number) row[11]).intValue() : null;
+            ArchDossier row = rows.get(0);
+            idDossier = row.getIdDossier();
+            portefeuille = row.getPortefeuille();
+            pin = row.getPin();
+            relation = row.getRelation();
+            charge = row.getCharge();
+            typeArchive = toTypeArchiveLabel(row.getTypeArchive());
+            filiale = toFilialeLabel(row.getIdFiliale());
+
+            ArchEmplacement emplacement = DossierEmpUtil.findPrimaryEmplacement(em, idDossier);
+            etage = emplacement == null ? null : emplacement.getEtage();
+            salle = emplacement == null ? null : emplacement.getSalle();
+            rayon = emplacement == null ? null : emplacement.getRayon();
+            rangee = emplacement == null ? null : emplacement.getRangee();
+            boite = DossierEmpUtil.findBoitesSummary(em, idDossier);
             resultLoaded = true;
 
             loadDocumentsForCurrentDossier(em);
@@ -252,7 +251,7 @@ public class FicheDossierBean implements Serializable {
         addInfoPair(infoTable, "Charge", charge, labelFont, valueFont, lightBlue);
         addInfoPair(infoTable, "Type archive", typeArchive, labelFont, valueFont, lightBlue);
         addInfoPair(infoTable, "Filiale", filiale, labelFont, valueFont, lightBlue);
-        addInfoPair(infoTable, "Boite", boite == null ? "" : String.valueOf(boite), labelFont, valueFont, lightBlue);
+        addInfoPair(infoTable, "Boites", safe(boite), labelFont, valueFont, lightBlue);
         document.add(infoTable);
 
         document.add(new Paragraph(" "));
@@ -555,7 +554,7 @@ public class FicheDossierBean implements Serializable {
         return rangee;
     }
 
-    public Integer getBoite() {
+    public String getBoite() {
         return boite;
     }
 

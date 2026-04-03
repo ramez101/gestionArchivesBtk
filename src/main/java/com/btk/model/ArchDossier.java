@@ -1,5 +1,4 @@
 package com.btk.model;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -36,9 +35,6 @@ public class ArchDossier {
     @Column(name = "ID_FILIALE")
     private String idFiliale;
 
-    @Column(name = "ID_EMPLACEMENT")
-    private Integer idEmplacement;
-
     public Long getIdDossier() { return idDossier; }
     public void setIdDossier(Long idDossier) { this.idDossier = idDossier; }
 
@@ -59,7 +55,4 @@ public class ArchDossier {
 
     public String getIdFiliale() { return idFiliale; }
     public void setIdFiliale(String idFiliale) { this.idFiliale = idFiliale; }
-
-    public Integer getIdEmplacement() { return idEmplacement; }
-    public void setIdEmplacement(Integer idEmplacement) { this.idEmplacement = idEmplacement; }
 }

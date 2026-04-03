@@ -19,6 +19,95 @@
                 font-weight: 700;
                 letter-spacing: .5px;
             }
+
+            .boite-picker {
+                display: flex;
+                align-items: flex-end;
+                gap: 10px;
+                flex-wrap: wrap;
+            }
+
+            .boite-picker-field {
+                flex: 0 0 180px;
+                max-width: 180px;
+            }
+
+            .boite-picker-field .ui-autocomplete,
+            .boite-picker-field .ui-autocomplete-input,
+            .boite-picker-field input {
+                width: 100%;
+            }
+
+            .boite-add-btn.ui-button.ui-widget {
+                min-width: 42px;
+                width: 42px;
+                height: 42px;
+                border-radius: 10px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .boite-add-btn.ui-button.ui-widget .ui-button-text {
+                padding: 0;
+            }
+
+            .boite-help {
+                margin-top: 8px;
+                font-size: .78rem;
+                color: #55748d;
+            }
+
+            .boite-inline-summary {
+                margin-top: 0;
+                align-self: center;
+                white-space: nowrap;
+            }
+
+            .boite-chip-list {
+                margin-top: 10px;
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+
+            .boite-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 6px 8px 6px 10px;
+                border-radius: 999px;
+                background: #eef6ff;
+                border: 1px solid #c8def6;
+                color: #174a73;
+                font-weight: 700;
+            }
+
+            .boite-chip-remove.ui-button.ui-widget {
+                width: 24px;
+                height: 24px;
+                min-width: 24px;
+                border-radius: 999px;
+                background: #d94b4b;
+                border-color: #d94b4b;
+            }
+
+            .boite-chip-remove.ui-button.ui-widget .ui-button-text {
+                display: none;
+            }
+
+            .boite-chip-remove.ui-button.ui-widget .ui-icon,
+            .boite-chip-remove.ui-button.ui-widget .pi {
+                color: #ffffff;
+                font-size: 1rem;
+            }
+
+            .boite-chip-empty {
+                margin-top: 10px;
+                font-size: .82rem;
+                color: #6b7d8b;
+            }
+
             .upload-dialog-overlay {
                 position: fixed;
                 inset: 0;
@@ -142,22 +231,55 @@
                                 <f:selectItem itemLabel="BTK Finance" itemValue="btk-finance"/>
                                 <f:selectItem itemLabel="BTK Leasing" itemValue="btk-leasing"/>                            </h:selectOneMenu>
                         </div>
-                        <div class="form-row">
+                        <div class="form-row full">
                             <h:outputLabel for="boite" value="Boite"/>
-                            <p:autoComplete id="boite"
-                                            value="#{ajoutDossiersArchivesBean.boite}"
-                                            completeMethod="#{ajoutDossiersArchivesBean.completeBoite}"
-                                            required="true"
-                                            requiredMessage="Boite obligatoire."
-                                            forceSelection="false"
-                                            dropdown="false"
-                                            minQueryLength="0"
-                                            scrollHeight="220"
-                                            converterMessage="Boite invalide."
-                                            placeholder="Saisir num boite"
-                                            style="width:100%">
-                                <f:converter converterId="jakarta.faces.Integer"/>
-                            </p:autoComplete>
+                            <h:panelGroup id="boitesPanel" layout="block">
+                                <div class="boite-picker">
+                                    <div class="boite-picker-field">
+                                        <p:autoComplete id="boite"
+                                                        value="#{ajoutDossiersArchivesBean.boite}"
+                                                        completeMethod="#{ajoutDossiersArchivesBean.completeBoite}"
+                                                        forceSelection="false"
+                                                        dropdown="false"
+                                                        minQueryLength="0"
+                                                        scrollHeight="220"
+                                                        converterMessage="Boite invalide."
+                                                        placeholder="Saisir num boite">
+                                            <f:converter converterId="jakarta.faces.Integer"/>
+                                        </p:autoComplete>
+                                    </div>
+                                    <p:commandButton id="addBoiteBtn"
+                                                     icon="pi pi-plus"
+                                                     title="Ajouter boite"
+                                                     action="#{ajoutDossiersArchivesBean.addBoiteSelection}"
+                                                     process="@this boite"
+                                                     update="boitesPanel boite :growl"
+                                                     styleClass="boite-add-btn btn-primary"/>
+                                    <ui:fragment rendered="#{not empty ajoutDossiersArchivesBean.boitesSummary}">
+                                        <div class="boite-help boite-inline-summary">Boites associees : #{ajoutDossiersArchivesBean.boitesSummary}</div>
+                                    </ui:fragment>
+                                </div>
+                                <ui:fragment rendered="#{not empty ajoutDossiersArchivesBean.selectedBoites}">
+                                    <div class="boite-chip-list">
+                                        <ui:repeat value="#{ajoutDossiersArchivesBean.selectedBoites}" var="item">
+                                            <div class="boite-chip">
+                                                <span>Boite #{item}</span>
+                                                <p:commandButton icon="pi pi-times"
+                                                                 title="Retirer cette boite"
+                                                                 action="#{ajoutDossiersArchivesBean.removeBoiteSelection}"
+                                                                 process="@this"
+                                                                 update="boitesPanel boite :growl"
+                                                                 styleClass="boite-chip-remove ui-button-icon-only">
+                                                    <f:setPropertyActionListener target="#{ajoutDossiersArchivesBean.boiteToRemove}" value="#{item}"/>
+                                                </p:commandButton>
+                                            </div>
+                                        </ui:repeat>
+                                    </div>
+                                </ui:fragment>
+                                <ui:fragment rendered="#{empty ajoutDossiersArchivesBean.selectedBoites}">
+                                    <div class="boite-chip-empty">Aucune boite ajoutee pour le moment.</div>
+                                </ui:fragment>
+                            </h:panelGroup>
                         </div>
 
                         <input id="docsPayload" name="docsPayload" type="hidden" />

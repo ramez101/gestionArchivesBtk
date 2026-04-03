@@ -17,6 +17,7 @@ import java.util.Map.Entry;
 
 import com.btk.model.ArchDossier;
 import com.btk.model.ArchEmplacement;
+import com.btk.util.DossierEmpUtil;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
@@ -51,6 +52,8 @@ public class AjoutDossiersArchivesBean implements Serializable {
     private Long nextDossierId;
     private Integer boite;
     private List<Integer> boites = Collections.emptyList();
+    private List<Integer> selectedBoites = new ArrayList<>();
+    private Integer boiteToRemove;
     private String docsPayload;
 
     @Inject
@@ -71,9 +74,14 @@ public class AjoutDossiersArchivesBean implements Serializable {
 
     public void save() {
         EntityManager em = getEMF().createEntityManager();
+        boolean txStarted = false;
         try {
-            utx.begin();
-            em.joinTransaction();
+            List<Integer> boitesToSave = DossierEmpUtil.normalizeBoites(resolveBoitesToSave());
+            if (boitesToSave.isEmpty()) {
+                addWarn("Ajouter au moins une boite.");
+                markValidationFailed();
+                return;
+            }
 
             if (pin != null && !pin.isBlank()) {
                 Long existing = em.createQuery(
@@ -83,18 +91,23 @@ public class AjoutDossiersArchivesBean implements Serializable {
                         .setParameter("pin", pin.trim().toUpperCase())
                         .getSingleResult();
                 if (existing != null && existing > 0) {
-                    utx.rollback();
-                    FacesContext.getCurrentInstance()
-                            .addMessage(null, new FacesMessage(FacesMessage.SEVERITY_WARN,
-                                    "Pin deja utilise.", null));
+                    addWarn("Pin deja utilise.");
+                    markValidationFailed();
                     return;
                 }
             }
 
-            Integer emplacementId = findEmplacementId(em);
-            if (emplacementId == null) {
-                throw new IllegalStateException("Emplacement introuvable.");
+            for (Integer boiteValue : boitesToSave) {
+                if (!DossierEmpUtil.boiteExists(em, boiteValue)) {
+                    addError("La boite " + boiteValue + " est introuvable.");
+                    markValidationFailed();
+                    return;
+                }
             }
+
+            utx.begin();
+            txStarted = true;
+            em.joinTransaction();
 
             ArchDossier dossier = new ArchDossier();
             dossier.setPortefeuille(portefeuille);
@@ -103,23 +116,29 @@ public class AjoutDossiersArchivesBean implements Serializable {
             dossier.setCharge(charge);
             dossier.setTypeArchive(typeArchive);
             dossier.setIdFiliale(filialeId);
-            dossier.setIdEmplacement(emplacementId);
 
             em.persist(dossier);
             em.flush();
 
-            int docsSaved = saveDocuments(em, dossier);
+            DossierEmpUtil.replaceBoites(em, dossier.getIdDossier(), dossier.getPin(), dossier.getRelation(), boitesToSave);
+
+            Path dossierPath = prepareDossierDirectory(dossier);
+
+            int docsSaved = saveDocuments(em, dossier, dossierPath, boitesToSave.get(0));
 
             utx.commit();
+            txStarted = false;
             resetForm();
-            FacesContext.getCurrentInstance()
-                    .addMessage(null, new FacesMessage(FacesMessage.SEVERITY_INFO,
-                            "Dossier enregistre avec succes. Documents sauvegardes: " + docsSaved + ".", null));
+            addInfo("Dossier enregistre avec succes. Boites associees: "
+                    + formatBoites(boitesToSave)
+                    + ". Documents sauvegardes: " + docsSaved + ".");
         } catch (Exception e) {
-            try { if (utx != null) utx.rollback(); } catch (Exception ignored) {}
-            FacesContext.getCurrentInstance()
-                    .addMessage(null, new FacesMessage(FacesMessage.SEVERITY_ERROR,
-                            "Erreur enregistrement : " + e.getMessage(), null));
+            try {
+                if (txStarted && utx != null) {
+                    utx.rollback();
+                }
+            } catch (Exception ignored) {}
+            addError("Erreur enregistrement : " + e.getMessage());
         } finally {
             em.close();
         }
@@ -134,6 +153,8 @@ public class AjoutDossiersArchivesBean implements Serializable {
         filialeId = null;
 
         boite = null;
+        selectedBoites = new ArrayList<>();
+        boiteToRemove = null;
         refreshNextDossierId();
         boites = fetchBoites();
         docsPayload = null;
@@ -150,20 +171,6 @@ public class AjoutDossiersArchivesBean implements Serializable {
         } finally {
             em.close();
         }
-    }
-
-    private Integer findEmplacementId(EntityManager em) {
-        if (boite == null) {
-            return null;
-        }
-        List<Integer> ids = em.createQuery(
-                        "select e.idEmplacement from ArchEmplacement e where e.boite = :boite",
-                        Integer.class)
-                .setParameter("boite", boite)
-                .setMaxResults(1)
-                .getResultList();
-
-        return ids.isEmpty() ? null : ids.get(0);
     }
 
     private List<Integer> fetchBoites() {
@@ -201,6 +208,41 @@ public class AjoutDossiersArchivesBean implements Serializable {
         return result;
     }
 
+    public void addBoiteSelection() {
+        if (boite == null) {
+            addWarn("Saisir un numero de boite avant d'ajouter.");
+            markValidationFailed();
+            return;
+        }
+
+        if (boites == null || !boites.contains(boite)) {
+            addError("La boite " + boite + " est introuvable.");
+            markValidationFailed();
+            return;
+        }
+
+        if (selectedBoites.contains(boite)) {
+            addWarn("La boite " + boite + " est deja associee.");
+            boite = null;
+            markValidationFailed();
+            return;
+        }
+
+        selectedBoites.add(boite);
+        addInfo("Boite " + boite + " ajoutee.");
+        boite = null;
+    }
+
+    public void removeBoiteSelection() {
+        if (boiteToRemove == null) {
+            return;
+        }
+
+        selectedBoites.remove(boiteToRemove);
+        addInfo("Boite " + boiteToRemove + " retiree.");
+        boiteToRemove = null;
+    }
+
     private static synchronized EntityManagerFactory getEMF() {
         if (emf == null || !emf.isOpen()) {
             emf = Persistence.createEntityManagerFactory("btk");
@@ -213,11 +255,15 @@ public class AjoutDossiersArchivesBean implements Serializable {
 
     public Long getNextDossierId() { return nextDossierId; }
     public List<Integer> getBoites() { return boites; }
+    public List<Integer> getSelectedBoites() { return selectedBoites; }
+    public Integer getBoiteToRemove() { return boiteToRemove; }
+    public void setBoiteToRemove(Integer boiteToRemove) { this.boiteToRemove = boiteToRemove; }
+    public String getBoitesSummary() { return DossierEmpUtil.formatBoites(resolveBoitesToSave()); }
 
     public String getDocsPayload() { return docsPayload; }
     public void setDocsPayload(String docsPayload) { this.docsPayload = docsPayload; }
 
-    private int saveDocuments(EntityManager em, ArchDossier dossier) throws Exception {
+    private int saveDocuments(EntityManager em, ArchDossier dossier, Path dossierPath, Integer boitePrincipale) throws Exception {
         String payload = resolveDocsPayload();
         List<DocItem> docs = parseDocsPayload(payload);
         Map<String, Part> parts = collectParts();
@@ -230,10 +276,6 @@ public class AjoutDossiersArchivesBean implements Serializable {
         }
 
         String dossierName = buildDossierName(dossier);
-        Files.createDirectories(DOCUMENTS_ROOT);
-        Path dossierPath = DOCUMENTS_ROOT.resolve(dossierName);
-        Files.createDirectories(dossierPath);
-
         if (parts.isEmpty()) {
             throw new IllegalStateException("Aucun fichier n'a ete recu par le serveur.");
         }
@@ -266,7 +308,7 @@ public class AjoutDossiersArchivesBean implements Serializable {
                     .setParameter("nom", dossierName)
                     .setParameter("path", dossierPath.toString())
                     .setParameter("docs", fileName)
-                    .setParameter("boite", boite)
+                    .setParameter("boite", boitePrincipale)
                     .setParameter("user", resolveUtilisateur())
                     .executeUpdate();
             savedDocsMeta.add(new DocItem(
@@ -282,6 +324,13 @@ public class AjoutDossiersArchivesBean implements Serializable {
         writeMetadataFile(dossierPath, savedDocsMeta);
 
         return savedCount;
+    }
+
+    private Path prepareDossierDirectory(ArchDossier dossier) throws Exception {
+        Files.createDirectories(DOCUMENTS_ROOT);
+        Path dossierPath = DOCUMENTS_ROOT.resolve(buildDossierName(dossier));
+        Files.createDirectories(dossierPath);
+        return dossierPath;
     }
 
     private void writeMetadataFile(Path dossierPath, List<DocItem> docs) throws Exception {
@@ -460,6 +509,18 @@ public class AjoutDossiersArchivesBean implements Serializable {
         return value.replaceAll("[\\\\/:*?\"<>|]", "-").trim();
     }
 
+    private List<Integer> resolveBoitesToSave() {
+        List<Integer> resolved = new ArrayList<>(selectedBoites);
+        if (boite != null && !resolved.contains(boite)) {
+            resolved.add(boite);
+        }
+        return resolved;
+    }
+
+    private String formatBoites(List<Integer> dossierBoites) {
+        return DossierEmpUtil.formatBoites(dossierBoites);
+    }
+
     private String resolveUtilisateur() {
         if (loginBean != null && loginBean.getUtilisateur() != null) {
             String unix = loginBean.getUtilisateur().getUnix();
@@ -468,6 +529,25 @@ public class AjoutDossiersArchivesBean implements Serializable {
             }
         }
         return "unknown";
+    }
+
+    private void addInfo(String message) {
+        FacesContext.getCurrentInstance().addMessage(null,
+                new FacesMessage(FacesMessage.SEVERITY_INFO, message, null));
+    }
+
+    private void addWarn(String message) {
+        FacesContext.getCurrentInstance().addMessage(null,
+                new FacesMessage(FacesMessage.SEVERITY_WARN, message, null));
+    }
+
+    private void addError(String message) {
+        FacesContext.getCurrentInstance().addMessage(null,
+                new FacesMessage(FacesMessage.SEVERITY_ERROR, message, null));
+    }
+
+    private void markValidationFailed() {
+        FacesContext.getCurrentInstance().validationFailed();
     }
 
     private static class DocItem {

@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 
 import com.btk.model.ArchDossier;
 import com.btk.model.ArchEmplacement;
+import com.btk.util.DossierEmpUtil;
 
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
@@ -57,7 +58,7 @@ public class ConsultationArchivesBean implements Serializable {
     private Integer salle;
     private Integer rayon;
     private Integer rangee;
-    private Integer boite;
+    private String boite;
     private boolean resultLoaded;
     private List<ScannedDocumentRow> scannedDocuments = Collections.emptyList();
     private List<TransmissionHistoryRow> transmissionHistory = Collections.emptyList();
@@ -78,37 +79,35 @@ public class ConsultationArchivesBean implements Serializable {
             String searchedField = searchByRelation ? "relation" : "pin";
 
             var query = em.createQuery(
-                            "select d.idDossier, d.portefeuille, d.pin, d.relation, d.charge, d.typeArchive, d.idFiliale, " +
-                                    "e.etage, e.salle, e.rayon, e.rangee, e.boite " +
-                                    "from " + ArchDossier.class.getSimpleName() + " d, " +
-                                    ArchEmplacement.class.getSimpleName() + " e " +
-                                    "where d.idEmplacement = e.idEmplacement " +
-                                    "and upper(trim(d." + searchedField + ")) = :searchValue " +
+                            "select d from " + ArchDossier.class.getSimpleName() + " d " +
+                                    "where upper(trim(d." + searchedField + ")) = :searchValue " +
                                     "order by d.idDossier",
-                            Object[].class)
+                            ArchDossier.class)
                     .setParameter("searchValue", normalizeSearchValue(effectiveValue))
                     .setMaxResults(1);
 
-            List<Object[]> rows = query.getResultList();
+            List<ArchDossier> rows = query.getResultList();
 
             if (rows.isEmpty()) {
                 PrimeFaces.current().executeScript("PF('archiveNotFoundDialog').show()");
                 return;
             }
 
-            Object[] row = rows.get(0);
-            idDossier = row[0] instanceof Number ? ((Number) row[0]).longValue() : null;
-            portefeuille = (String) row[1];
-            pin = (String) row[2];
-            relation = (String) row[3];
-            charge = (String) row[4];
-            typeArchive = toTypeArchiveLabel((String) row[5]);
-            filiale = toFilialeLabel((String) row[6]);
-            etage = (Integer) row[7];
-            salle = (Integer) row[8];
-            rayon = (Integer) row[9];
-            rangee = (Integer) row[10];
-            boite = (Integer) row[11];
+            ArchDossier row = rows.get(0);
+            idDossier = row.getIdDossier();
+            portefeuille = row.getPortefeuille();
+            pin = row.getPin();
+            relation = row.getRelation();
+            charge = row.getCharge();
+            typeArchive = toTypeArchiveLabel(row.getTypeArchive());
+            filiale = toFilialeLabel(row.getIdFiliale());
+
+            ArchEmplacement emplacement = DossierEmpUtil.findPrimaryEmplacement(em, idDossier);
+            etage = emplacement == null ? null : emplacement.getEtage();
+            salle = emplacement == null ? null : emplacement.getSalle();
+            rayon = emplacement == null ? null : emplacement.getRayon();
+            rangee = emplacement == null ? null : emplacement.getRangee();
+            boite = DossierEmpUtil.findBoitesSummary(em, idDossier);
             resultLoaded = true;
             scannedDocuments = Collections.emptyList();
 
@@ -493,7 +492,7 @@ public class ConsultationArchivesBean implements Serializable {
         return rangee;
     }
 
-    public Integer getBoite() {
+    public String getBoite() {
         return boite;
     }
 

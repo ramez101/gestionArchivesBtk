@@ -15,6 +15,7 @@
         <class>com.btk.model.Utilisateur</class>
         <class>com.btk.model.ArchEmplacement</class>
         <class>com.btk.model.ArchDossier</class>
+        <class>com.btk.model.DossierEmp</class>
         <exclude-unlisted-classes>true</exclude-unlisted-classes>
 
         <properties>

@@ -48,6 +48,94 @@
                 font-size: .82rem;
             }
 
+            .modifier-boite-picker {
+                display: flex;
+                align-items: flex-end;
+                gap: 10px;
+                flex-wrap: wrap;
+            }
+
+            .modifier-boite-picker-field {
+                flex: 0 0 180px;
+                max-width: 180px;
+            }
+
+            .modifier-boite-picker-field .ui-autocomplete,
+            .modifier-boite-picker-field .ui-autocomplete-input,
+            .modifier-boite-picker-field input {
+                width: 100%;
+            }
+
+            .modifier-boite-add-btn.ui-button.ui-widget {
+                min-width: 42px;
+                width: 42px;
+                height: 42px;
+                border-radius: 10px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .modifier-boite-add-btn.ui-button.ui-widget .ui-button-text {
+                padding: 0;
+            }
+
+            .modifier-boite-help {
+                margin-top: 8px;
+                font-size: .78rem;
+                color: #55748d;
+            }
+
+            .modifier-boite-inline-summary {
+                margin-top: 0;
+                align-self: center;
+                white-space: nowrap;
+            }
+
+            .modifier-boite-chip-list {
+                margin-top: 10px;
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+
+            .modifier-boite-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 6px 8px 6px 10px;
+                border-radius: 999px;
+                background: #eef6ff;
+                border: 1px solid #c8def6;
+                color: #174a73;
+                font-weight: 700;
+            }
+
+            .modifier-boite-chip-remove.ui-button.ui-widget {
+                width: 24px;
+                height: 24px;
+                min-width: 24px;
+                border-radius: 999px;
+                background: #d94b4b;
+                border-color: #d94b4b;
+            }
+
+            .modifier-boite-chip-remove.ui-button.ui-widget .ui-button-text {
+                display: none;
+            }
+
+            .modifier-boite-chip-remove.ui-button.ui-widget .ui-icon,
+            .modifier-boite-chip-remove.ui-button.ui-widget .pi {
+                color: #ffffff;
+                font-size: 1rem;
+            }
+
+            .modifier-boite-chip-empty {
+                margin-top: 10px;
+                font-size: .82rem;
+                color: #6b7d8b;
+            }
+
             .modifier-confirm.ui-dialog {
                 border: 0;
                 box-shadow: 0 18px 45px rgba(0, 0, 0, .18);
@@ -213,57 +301,56 @@
                             </div>
 
                             <div class="form-row full">
-                                <div class="form-row-grid">
-                                    <div class="form-row small">
-                                        <h:outputLabel for="etage" value="Etage"/>
-                                        <h:selectOneMenu id="etage"
-                                                         value="#{modifierArchivesBean.etage}"
-                                                         disabled="#{not modifierArchivesBean.resultLoaded}">
-                                            <f:selectItem itemLabel="Choisir" itemValue="#{null}" noSelectionOption="true"/>
-                                            <f:selectItems value="#{modifierArchivesBean.etages}" var="item" itemLabel="#{item}" itemValue="#{item}"/>
-                                            <p:ajax listener="#{modifierArchivesBean.onEtageChange}" update="salle rayon rangee boite"/>
-                                        </h:selectOneMenu>
+                                <h:outputLabel for="boite" value="Boite"/>
+                                <h:panelGroup id="boitesPanel" layout="block">
+                                    <div class="modifier-boite-picker">
+                                        <div class="modifier-boite-picker-field">
+                                            <p:autoComplete id="boite"
+                                                            value="#{modifierArchivesBean.boite}"
+                                                            completeMethod="#{modifierArchivesBean.completeBoite}"
+                                                            forceSelection="false"
+                                                            dropdown="false"
+                                                            minQueryLength="0"
+                                                            scrollHeight="220"
+                                                            converterMessage="Boite invalide."
+                                                            disabled="#{not modifierArchivesBean.resultLoaded}"
+                                                            placeholder="Saisir num boite">
+                                                <f:converter converterId="jakarta.faces.Integer"/>
+                                            </p:autoComplete>
+                                        </div>
+                                        <p:commandButton id="addBoiteModifierBtn"
+                                                         icon="pi pi-plus"
+                                                         title="Ajouter boite"
+                                                         action="#{modifierArchivesBean.addBoiteSelection}"
+                                                         process="@this boite"
+                                                         update="boitesPanel boite messages"
+                                                         disabled="#{not modifierArchivesBean.resultLoaded}"
+                                                         styleClass="modifier-boite-add-btn modifier-btn"/>
+                                        <ui:fragment rendered="#{not empty modifierArchivesBean.boitesSummary}">
+                                            <div class="modifier-boite-help modifier-boite-inline-summary">Boites associees : #{modifierArchivesBean.boitesSummary}</div>
+                                        </ui:fragment>
                                     </div>
-                                    <div class="form-row small">
-                                        <h:outputLabel for="salle" value="Salle"/>
-                                        <h:selectOneMenu id="salle"
-                                                         value="#{modifierArchivesBean.salle}"
-                                                         disabled="#{not modifierArchivesBean.resultLoaded}">
-                                            <f:selectItem itemLabel="Choisir" itemValue="#{null}" noSelectionOption="true"/>
-                                            <f:selectItems value="#{modifierArchivesBean.salles}" var="item" itemLabel="#{item}" itemValue="#{item}"/>
-                                            <p:ajax listener="#{modifierArchivesBean.onSalleChange}" update="rayon rangee boite"/>
-                                        </h:selectOneMenu>
-                                    </div>
-                                    <div class="form-row small">
-                                        <h:outputLabel for="rayon" value="Rayon"/>
-                                        <h:selectOneMenu id="rayon"
-                                                         value="#{modifierArchivesBean.rayon}"
-                                                         disabled="#{not modifierArchivesBean.resultLoaded}">
-                                            <f:selectItem itemLabel="Choisir" itemValue="#{null}" noSelectionOption="true"/>
-                                            <f:selectItems value="#{modifierArchivesBean.rayons}" var="item" itemLabel="#{item}" itemValue="#{item}"/>
-                                            <p:ajax listener="#{modifierArchivesBean.onRayonChange}" update="rangee boite"/>
-                                        </h:selectOneMenu>
-                                    </div>
-                                    <div class="form-row small">
-                                        <h:outputLabel for="rangee" value="Range"/>
-                                        <h:selectOneMenu id="rangee"
-                                                         value="#{modifierArchivesBean.rangee}"
-                                                         disabled="#{not modifierArchivesBean.resultLoaded}">
-                                            <f:selectItem itemLabel="Choisir" itemValue="#{null}" noSelectionOption="true"/>
-                                            <f:selectItems value="#{modifierArchivesBean.rangees}" var="item" itemLabel="#{item}" itemValue="#{item}"/>
-                                            <p:ajax listener="#{modifierArchivesBean.onRangeeChange}" update="boite"/>
-                                        </h:selectOneMenu>
-                                    </div>
-                                    <div class="form-row small">
-                                        <h:outputLabel for="boite" value="Boite"/>
-                                        <h:selectOneMenu id="boite"
-                                                         value="#{modifierArchivesBean.boite}"
-                                                         disabled="#{not modifierArchivesBean.resultLoaded}">
-                                            <f:selectItem itemLabel="Choisir" itemValue="#{null}" noSelectionOption="true"/>
-                                            <f:selectItems value="#{modifierArchivesBean.boites}" var="item" itemLabel="#{item}" itemValue="#{item}"/>
-                                        </h:selectOneMenu>
-                                    </div>
-                                </div>
+                                    <ui:fragment rendered="#{not empty modifierArchivesBean.selectedBoites}">
+                                        <div class="modifier-boite-chip-list">
+                                            <ui:repeat value="#{modifierArchivesBean.selectedBoites}" var="item">
+                                                <div class="modifier-boite-chip">
+                                                    <span>Boite #{item}</span>
+                                                    <p:commandButton icon="pi pi-times"
+                                                                     title="Retirer cette boite"
+                                                                     action="#{modifierArchivesBean.removeBoiteSelection}"
+                                                                     process="@this"
+                                                                     update="boitesPanel boite messages"
+                                                                     styleClass="modifier-boite-chip-remove ui-button-icon-only">
+                                                        <f:setPropertyActionListener target="#{modifierArchivesBean.boiteToRemove}" value="#{item}"/>
+                                                    </p:commandButton>
+                                                </div>
+                                            </ui:repeat>
+                                        </div>
+                                    </ui:fragment>
+                                    <ui:fragment rendered="#{empty modifierArchivesBean.selectedBoites}">
+                                        <div class="modifier-boite-chip-empty">Aucune boite associee pour le moment.</div>
+                                    </ui:fragment>
+                                </h:panelGroup>
                             </div>
                         </div>
                     </div>

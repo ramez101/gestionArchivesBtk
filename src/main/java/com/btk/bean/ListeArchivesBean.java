@@ -16,7 +16,7 @@ import java.util.Locale;
 import java.util.Set;
 
 import com.btk.model.ArchDossier;
-import com.btk.model.ArchEmplacement;
+import com.btk.util.DossierEmpUtil;
 import com.lowagie.text.Document;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
@@ -102,26 +102,30 @@ public class ListeArchivesBean implements Serializable {
                 }
             }
 
-            List<Object[]> rows = em.createQuery(
-                            "select d.idDossier, d.portefeuille, d.pin, d.relation, d.charge, d.typeArchive, d.idFiliale, " +
-                                    "e.boite " +
-                                    "from " + ArchDossier.class.getSimpleName() + " d, " +
-                                    ArchEmplacement.class.getSimpleName() + " e " +
-                                    "where d.idEmplacement = e.idEmplacement " +
+            List<ArchDossier> rows = em.createQuery(
+                            "select d from " + ArchDossier.class.getSimpleName() + " d " +
                                     "order by d.idDossier desc",
-                            Object[].class)
+                            ArchDossier.class)
                     .getResultList();
 
+            List<Long> dossierIds = new ArrayList<>(rows.size());
+            for (ArchDossier row : rows) {
+                if (row.getIdDossier() != null) {
+                    dossierIds.add(row.getIdDossier());
+                }
+            }
+            var boitesByDossier = DossierEmpUtil.findBoitesByDossierIds(em, dossierIds);
+
             List<ArchiveRow> loaded = new ArrayList<>(rows.size());
-            for (Object[] row : rows) {
-                Long idDossier = row[0] instanceof Number ? ((Number) row[0]).longValue() : null;
-                String portefeuille = toStringValue(row[1]);
-                String pin = toStringValue(row[2]);
-                String relation = toStringValue(row[3]);
-                String charge = toStringValue(row[4]);
-                String typeArchive = toTypeArchiveLabel(toStringValue(row[5]));
-                String filiale = toFilialeLabel(toStringValue(row[6]));
-                Integer boite = row[7] instanceof Number ? ((Number) row[7]).intValue() : null;
+            for (ArchDossier row : rows) {
+                Long idDossier = row.getIdDossier();
+                String portefeuille = toStringValue(row.getPortefeuille());
+                String pin = toStringValue(row.getPin());
+                String relation = toStringValue(row.getRelation());
+                String charge = toStringValue(row.getCharge());
+                String typeArchive = toTypeArchiveLabel(toStringValue(row.getTypeArchive()));
+                String filiale = toFilialeLabel(toStringValue(row.getIdFiliale()));
+                String boite = DossierEmpUtil.formatBoites(boitesByDossier.get(idDossier));
 
                 String dossierName = buildDossierName(idDossier, relation, pin).toUpperCase(Locale.ROOT);
                 boolean hasDocuments = dossierNamesWithDocs.contains(dossierName);
@@ -329,11 +333,11 @@ public class ListeArchivesBean implements Serializable {
         private final String charge;
         private final String typeArchive;
         private final String filiale;
-        private final Integer boite;
+        private final String boite;
         private final String documents;
 
         ArchiveRow(Long idDossier, String portefeuille, String pin, String relation, String charge,
-                   String typeArchive, String filiale, Integer boite, String documents) {
+                   String typeArchive, String filiale, String boite, String documents) {
             this.idDossier = idDossier;
             this.portefeuille = portefeuille;
             this.pin = pin;
@@ -373,7 +377,7 @@ public class ListeArchivesBean implements Serializable {
             return filiale;
         }
 
-        public Integer getBoite() {
+        public String getBoite() {
             return boite;
         }
 

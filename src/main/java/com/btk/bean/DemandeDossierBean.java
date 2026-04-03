@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Locale;
 
 import com.btk.model.ArchDossier;
-import com.btk.model.ArchEmplacement;
+import com.btk.util.DossierEmpUtil;
 
 import jakarta.annotation.Resource;
 import jakarta.faces.application.FacesMessage;
@@ -61,7 +61,7 @@ public class DemandeDossierBean implements Serializable {
             String primaryField = byRelation ? "relation" : "pin";
             String fallbackField = byRelation ? "pin" : "relation";
 
-            Object[] row = findLatestByField(em, primaryField, normalizedSearchValue);
+            ArchDossier row = findLatestByField(em, primaryField, normalizedSearchValue);
             if (row == null) {
                 row = findLatestByField(em, fallbackField, normalizedSearchValue);
             }
@@ -72,9 +72,9 @@ public class DemandeDossierBean implements Serializable {
                 return;
             }
 
-            pin = toStringValue(row[0]);
-            relation = toStringValue(row[1]);
-            boite = toStringValue(row[2]);
+            pin = normalize(row.getPin());
+            relation = normalize(row.getRelation());
+            boite = DossierEmpUtil.findBoitesSummary(em, row.getIdDossier());
             dossierLoaded = true;
 
             addInfo("Dossier charge. Completer les informations puis submit.");
@@ -83,19 +83,16 @@ public class DemandeDossierBean implements Serializable {
         }
     }
 
-    private Object[] findLatestByField(EntityManager em, String field, String searchValue) {
-        TypedQuery<Object[]> query = em.createQuery(
-                "select d.pin, d.relation, e.boite " +
-                        "from " + ArchDossier.class.getSimpleName() + " d " +
-                        "left join " + ArchEmplacement.class.getSimpleName() + " e " +
-                        "on d.idEmplacement = e.idEmplacement " +
+    private ArchDossier findLatestByField(EntityManager em, String field, String searchValue) {
+        TypedQuery<ArchDossier> query = em.createQuery(
+                "select d from " + ArchDossier.class.getSimpleName() + " d " +
                         "where upper(trim(d." + field + ")) = :searchValue " +
                         "order by d.idDossier desc",
-                Object[].class);
+                ArchDossier.class);
         query.setParameter("searchValue", searchValue);
         query.setMaxResults(1);
 
-        List<Object[]> rows = query.getResultList();
+        List<ArchDossier> rows = query.getResultList();
         return rows.isEmpty() ? null : rows.get(0);
     }
 

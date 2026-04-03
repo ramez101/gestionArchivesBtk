@@ -19,7 +19,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import com.btk.model.ArchDossier;
-import com.btk.model.ArchEmplacement;
+import com.btk.util.DossierEmpUtil;
 
 import jakarta.annotation.Resource;
 import jakarta.faces.application.FacesMessage;
@@ -61,7 +61,8 @@ public class AjoutArchivesBean implements Serializable {
     private Long idDossier;
     private String pin;
     private String relation;
-    private Integer boite;
+    private String boite;
+    private Integer boitePrincipale;
     private boolean dossierLoaded;
 
     private String docsPayload;
@@ -83,14 +84,11 @@ public class AjoutArchivesBean implements Serializable {
             boolean byRelation = "relation".equalsIgnoreCase(searchType);
             String field = byRelation ? "relation" : "pin";
 
-            List<Object[]> rows = em.createQuery(
-                            "select d.idDossier, d.pin, d.relation, e.boite " +
-                                    "from " + ArchDossier.class.getSimpleName() + " d, " +
-                                    ArchEmplacement.class.getSimpleName() + " e " +
-                                    "where d.idEmplacement = e.idEmplacement " +
-                                    "and upper(trim(d." + field + ")) = :val " +
+            List<ArchDossier> rows = em.createQuery(
+                            "select d from " + ArchDossier.class.getSimpleName() + " d " +
+                                    "where upper(trim(d." + field + ")) = :val " +
                                     "order by d.idDossier",
-                            Object[].class)
+                            ArchDossier.class)
                     .setParameter("val", normalize(value))
                     .setMaxResults(1)
                     .getResultList();
@@ -101,11 +99,12 @@ public class AjoutArchivesBean implements Serializable {
                 return;
             }
 
-            Object[] row = rows.get(0);
-            idDossier = row[0] instanceof Number ? ((Number) row[0]).longValue() : null;
-            pin = (String) row[1];
-            relation = (String) row[2];
-            boite = (Integer) row[3];
+            ArchDossier row = rows.get(0);
+            idDossier = row.getIdDossier();
+            pin = row.getPin();
+            relation = row.getRelation();
+            boitePrincipale = DossierEmpUtil.findPrimaryBoite(em, idDossier);
+            boite = DossierEmpUtil.findBoitesSummary(em, idDossier);
             dossierLoaded = true;
 
             loadExistingDocuments(em);
@@ -190,13 +189,13 @@ public class AjoutArchivesBean implements Serializable {
                     }
 
                     em.createNativeQuery(
-                                    "insert into ARCH_DOCUMENT (ID_DOCUMENT, NOM_DOSSIER, PATH_DOSSIER, DOCUMENTS, BOITE, UTILISATEUR_CREE, DATE_CREATION) " +
+                            "insert into ARCH_DOCUMENT (ID_DOCUMENT, NOM_DOSSIER, PATH_DOSSIER, DOCUMENTS, BOITE, UTILISATEUR_CREE, DATE_CREATION) " +
                                             "values (:id, :nom, :path, :docs, :boite, :user, SYSDATE)")
                             .setParameter("id", nextDocId++)
                             .setParameter("nom", dossierName)
                             .setParameter("path", dossierPath.toString())
                             .setParameter("docs", fileName)
-                            .setParameter("boite", boite)
+                            .setParameter("boite", boitePrincipale)
                             .setParameter("user", resolveUtilisateur())
                             .executeUpdate();
 
@@ -601,6 +600,7 @@ public class AjoutArchivesBean implements Serializable {
         idDossier = null;
         pin = null;
         relation = null;
+        boitePrincipale = null;
         boite = null;
         dossierLoaded = false;
         existingDocuments = Collections.emptyList();
@@ -650,7 +650,7 @@ public class AjoutArchivesBean implements Serializable {
         return relation;
     }
 
-    public Integer getBoite() {
+    public String getBoite() {
         return boite;
     }
 

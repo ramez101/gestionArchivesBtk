@@ -4,8 +4,8 @@ import java.io.Serializable;
 import java.util.Collections;
 import java.util.List;
 
-import com.btk.model.ArchDossier;
 import com.btk.model.ArchEmplacement;
+import com.btk.model.DossierEmp;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
@@ -184,11 +184,8 @@ public class BoiteBean implements Serializable {
             }
 
             Long dossiersCount = em.createQuery(
-                            "select count(d) from " + ArchDossier.class.getSimpleName() + " d " +
-                                    "where d.idEmplacement in (" +
-                                    "select e.idEmplacement from " + ArchEmplacement.class.getSimpleName() + " e " +
-                                    "where e.boite = :boite" +
-                                    ")",
+                            "select count(de) from " + DossierEmp.class.getSimpleName() + " de " +
+                                    "where de.boite = :boite",
                             Long.class)
                     .setParameter("boite", boiteValue)
                     .getSingleResult();

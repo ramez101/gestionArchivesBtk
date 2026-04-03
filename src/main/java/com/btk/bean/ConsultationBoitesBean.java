@@ -5,7 +5,7 @@ import java.util.Collections;
 import java.util.List;
 
 import com.btk.model.ArchDossier;
-import com.btk.model.ArchEmplacement;
+import com.btk.util.DossierEmpUtil;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.faces.application.FacesMessage;
@@ -27,6 +27,7 @@ public class ConsultationBoitesBean implements Serializable {
     private String searchBoite;
     private List<ArchDossier> dossiers = Collections.emptyList();
     private ArchDossier selectedDossier;
+    private String selectedDossierBoites;
     private boolean searched;
     private boolean resultLoaded;
 
@@ -54,9 +55,8 @@ public class ConsultationBoitesBean implements Serializable {
         try {
             dossiers = em.createQuery(
                             "select d from " + ArchDossier.class.getSimpleName() + " d " +
-                                    "where d.idEmplacement in (" +
-                                    "select e.idEmplacement from " + ArchEmplacement.class.getSimpleName() + " e " +
-                                    "where e.boite = :boite" +
+                                    "where d.idDossier in (" +
+                                    "select de.idDossier from DossierEmp de where de.boite = :boite" +
                                     ") order by d.pin, d.relation, d.idDossier",
                             ArchDossier.class)
                     .setParameter("boite", boite)
@@ -78,6 +78,7 @@ public class ConsultationBoitesBean implements Serializable {
         searched = false;
         dossiers = Collections.emptyList();
         selectedDossier = null;
+        selectedDossierBoites = null;
         resultLoaded = false;
     }
 
@@ -111,6 +112,21 @@ public class ConsultationBoitesBean implements Serializable {
 
     public void setSelectedDossier(ArchDossier selectedDossier) {
         this.selectedDossier = selectedDossier;
+        if (selectedDossier == null || selectedDossier.getIdDossier() == null) {
+            selectedDossierBoites = null;
+            return;
+        }
+
+        EntityManager em = getEMF().createEntityManager();
+        try {
+            selectedDossierBoites = DossierEmpUtil.findBoitesSummary(em, selectedDossier.getIdDossier());
+        } finally {
+            em.close();
+        }
+    }
+
+    public String getSelectedDossierBoites() {
+        return selectedDossierBoites;
     }
 
     public boolean isSearched() {
