@@ -18,6 +18,7 @@ import java.util.Map.Entry;
 import com.btk.model.ArchDossier;
 import com.btk.model.ArchEmplacement;
 import com.btk.util.DossierEmpUtil;
+import com.btk.util.FilialeUtil;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
@@ -76,6 +77,8 @@ public class AjoutDossiersArchivesBean implements Serializable {
         EntityManager em = getEMF().createEntityManager();
         boolean txStarted = false;
         try {
+            String sessionFiliale = resolveSessionFiliale();
+            String sessionLegacyFiliale = resolveSessionLegacyFiliale();
             List<Integer> boitesToSave = DossierEmpUtil.normalizeBoites(resolveBoitesToSave());
             if (boitesToSave.isEmpty()) {
                 addWarn("Ajouter au moins une boite.");
@@ -86,9 +89,13 @@ public class AjoutDossiersArchivesBean implements Serializable {
             if (pin != null && !pin.isBlank()) {
                 Long existing = em.createQuery(
                                 "select count(d) from " + ArchDossier.class.getSimpleName() + " d " +
-                                        "where upper(trim(d.pin)) = :pin",
+                                        "where upper(trim(d.pin)) = :pin " +
+                                        "and (lower(trim(d.filiale)) = :filiale " +
+                                        "or (d.filiale is null and lower(trim(d.idFiliale)) = :legacyFiliale))",
                                 Long.class)
                         .setParameter("pin", pin.trim().toUpperCase())
+                        .setParameter("filiale", sessionFiliale)
+                        .setParameter("legacyFiliale", sessionLegacyFiliale)
                         .getSingleResult();
                 if (existing != null && existing > 0) {
                     addWarn("Pin deja utilise.");
@@ -98,7 +105,7 @@ public class AjoutDossiersArchivesBean implements Serializable {
             }
 
             for (Integer boiteValue : boitesToSave) {
-                if (!DossierEmpUtil.boiteExists(em, boiteValue)) {
+                if (!DossierEmpUtil.boiteExists(em, boiteValue, sessionFiliale)) {
                     addError("La boite " + boiteValue + " est introuvable.");
                     markValidationFailed();
                     return;
@@ -115,7 +122,8 @@ public class AjoutDossiersArchivesBean implements Serializable {
             dossier.setRelation(relation);
             dossier.setCharge(charge);
             dossier.setTypeArchive(typeArchive);
-            dossier.setIdFiliale(filialeId);
+            dossier.setIdFiliale(sessionLegacyFiliale);
+            dossier.setFiliale(sessionFiliale);
 
             em.persist(dossier);
             em.flush();
@@ -176,11 +184,7 @@ public class AjoutDossiersArchivesBean implements Serializable {
     private List<Integer> fetchBoites() {
         EntityManager em = getEMF().createEntityManager();
         try {
-            return em.createQuery(
-                            "select distinct e.boite from " + ArchEmplacement.class.getSimpleName() + " e " +
-                                    "order by e.boite",
-                            Integer.class)
-                    .getResultList();
+            return DossierEmpUtil.findBoitesByFiliale(em, resolveSessionFiliale());
         } finally {
             em.close();
         }
@@ -585,6 +589,19 @@ public class AjoutDossiersArchivesBean implements Serializable {
 
     public String getFilialeId() { return filialeId; }
     public void setFilialeId(String filialeId) { this.filialeId = filialeId; }
+
+    public String getFilialeLabel() { return FilialeUtil.toLabel(resolveSessionFiliale()); }
+
+    private String resolveSessionFiliale() {
+        if (loginBean != null) {
+            return loginBean.getCurrentFilialeCode();
+        }
+        return FilialeUtil.normalizeKey(filialeId);
+    }
+
+    private String resolveSessionLegacyFiliale() {
+        return FilialeUtil.toLegacyId(resolveSessionFiliale());
+    }
 
 }
 

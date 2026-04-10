@@ -20,6 +20,7 @@ import java.util.Map.Entry;
 
 import com.btk.model.ArchDossier;
 import com.btk.util.DossierEmpUtil;
+import com.btk.util.FilialeUtil;
 
 import jakarta.annotation.Resource;
 import jakarta.faces.application.FacesMessage;
@@ -87,9 +88,13 @@ public class AjoutArchivesBean implements Serializable {
             List<ArchDossier> rows = em.createQuery(
                             "select d from " + ArchDossier.class.getSimpleName() + " d " +
                                     "where upper(trim(d." + field + ")) = :val " +
+                                    "and (lower(trim(d.filiale)) = :filiale " +
+                                    "or (d.filiale is null and lower(trim(d.idFiliale)) = :legacyFiliale)) " +
                                     "order by d.idDossier",
                             ArchDossier.class)
                     .setParameter("val", normalize(value))
+                    .setParameter("filiale", resolveSessionFiliale())
+                    .setParameter("legacyFiliale", resolveSessionLegacyFiliale())
                     .setMaxResults(1)
                     .getResultList();
 
@@ -317,9 +322,13 @@ public class AjoutArchivesBean implements Serializable {
             return em.createQuery(
                             "select distinct d.relation from " + ArchDossier.class.getSimpleName() + " d " +
                                     "where upper(d.relation) like :q " +
+                                    "and (lower(trim(d.filiale)) = :filiale " +
+                                    "or (d.filiale is null and lower(trim(d.idFiliale)) = :legacyFiliale)) " +
                                     "order by d.relation",
                             String.class)
                     .setParameter("q", "%" + query.trim().toUpperCase(Locale.ROOT) + "%")
+                    .setParameter("filiale", resolveSessionFiliale())
+                    .setParameter("legacyFiliale", resolveSessionLegacyFiliale())
                     .setMaxResults(20)
                     .getResultList();
         } finally {
@@ -668,6 +677,17 @@ public class AjoutArchivesBean implements Serializable {
 
     public List<DocumentRow> getExistingDocuments() {
         return existingDocuments;
+    }
+
+    private String resolveSessionFiliale() {
+        if (loginBean != null) {
+            return loginBean.getCurrentFilialeCode();
+        }
+        return FilialeUtil.normalizeKey(null);
+    }
+
+    private String resolveSessionLegacyFiliale() {
+        return loginBean == null ? "" : loginBean.getCurrentFilialeId();
     }
 
     public static class DocumentRow implements Serializable {

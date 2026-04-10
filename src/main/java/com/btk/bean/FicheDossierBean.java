@@ -21,6 +21,7 @@ import org.primefaces.PrimeFaces;
 import com.btk.model.ArchDossier;
 import com.btk.model.ArchEmplacement;
 import com.btk.util.DossierEmpUtil;
+import com.btk.util.FilialeUtil;
 import com.lowagie.text.Document;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
@@ -38,6 +39,7 @@ import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.ExternalContext;
 import jakarta.faces.context.FacesContext;
 import jakarta.faces.view.ViewScoped;
+import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.json.Json;
 import jakarta.json.JsonArray;
@@ -55,6 +57,9 @@ public class FicheDossierBean implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private static EntityManagerFactory emf;
+
+    @Inject
+    private LoginBean loginBean;
 
     private String searchType = "pin";
     private String searchValue;
@@ -94,9 +99,13 @@ public class FicheDossierBean implements Serializable {
             TypedQuery<ArchDossier> query = em.createQuery(
                     "select d from " + ArchDossier.class.getSimpleName() + " d " +
                             "where upper(trim(d." + field + ")) = :searchValue " +
+                            "and (lower(trim(d.filiale)) = :filiale " +
+                            "or (d.filiale is null and lower(trim(d.idFiliale)) = :legacyFiliale)) " +
                             "order by d.idDossier",
                     ArchDossier.class);
             query.setParameter("searchValue", normalizeSearchValue(effectiveValue));
+            query.setParameter("filiale", resolveSessionFiliale());
+            query.setParameter("legacyFiliale", resolveSessionLegacyFiliale());
             query.setMaxResults(1);
 
             List<ArchDossier> rows = query.getResultList();
@@ -112,9 +121,9 @@ public class FicheDossierBean implements Serializable {
             relation = row.getRelation();
             charge = row.getCharge();
             typeArchive = toTypeArchiveLabel(row.getTypeArchive());
-            filiale = toFilialeLabel(row.getIdFiliale());
+            filiale = toFilialeLabel(resolveFilialeValue(row));
 
-            ArchEmplacement emplacement = DossierEmpUtil.findPrimaryEmplacement(em, idDossier);
+            ArchEmplacement emplacement = DossierEmpUtil.findPrimaryEmplacement(em, row);
             etage = emplacement == null ? null : emplacement.getEtage();
             salle = emplacement == null ? null : emplacement.getSalle();
             rayon = emplacement == null ? null : emplacement.getRayon();
@@ -148,9 +157,13 @@ public class FicheDossierBean implements Serializable {
             return em.createQuery(
                             "select distinct d.relation from " + ArchDossier.class.getSimpleName() + " d " +
                                     "where upper(d.relation) like :query " +
+                                    "and (lower(trim(d.filiale)) = :filiale " +
+                                    "or (d.filiale is null and lower(trim(d.idFiliale)) = :legacyFiliale)) " +
                                     "order by d.relation",
                             String.class)
                     .setParameter("query", "%" + query.trim().toUpperCase(Locale.ROOT) + "%")
+                    .setParameter("filiale", resolveSessionFiliale())
+                    .setParameter("legacyFiliale", resolveSessionLegacyFiliale())
                     .setMaxResults(20)
                     .getResultList();
         } finally {
@@ -435,16 +448,7 @@ public class FicheDossierBean implements Serializable {
     }
 
     private String toFilialeLabel(String filialeId) {
-        if (filialeId == null || filialeId.isBlank()) {
-            return filialeId;
-        }
-        if ("btk-bank".equalsIgnoreCase(filialeId)) {
-            return "BTK Bank";
-        }
-        if ("btk-finance".equalsIgnoreCase(filialeId)) {
-            return "BTK Finance";
-        }
-        return filialeId;
+        return FilialeUtil.toLabel(filialeId);
     }
 
     private String toTypeArchiveLabel(String value) {
@@ -564,6 +568,25 @@ public class FicheDossierBean implements Serializable {
 
     public List<FicheDocumentRow> getDocuments() {
         return documents;
+    }
+
+    private String resolveFilialeValue(ArchDossier dossier) {
+        if (dossier == null) {
+            return "";
+        }
+        String value = dossier.getFiliale();
+        if (value == null || value.isBlank()) {
+            value = dossier.getIdFiliale();
+        }
+        return value;
+    }
+
+    private String resolveSessionFiliale() {
+        return loginBean == null ? "" : loginBean.getCurrentFilialeCode();
+    }
+
+    private String resolveSessionLegacyFiliale() {
+        return loginBean == null ? "" : loginBean.getCurrentFilialeId();
     }
 
     public static class FicheDocumentRow implements Serializable {

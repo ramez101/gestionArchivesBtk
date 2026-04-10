@@ -1,5 +1,6 @@
 package com.btk.util;
 
+import com.btk.model.ArchDossier;
 import com.btk.model.ArchEmplacement;
 import com.btk.model.DossierEmp;
 import jakarta.persistence.EntityManager;
@@ -18,16 +19,15 @@ public final class DossierEmpUtil {
     }
 
     public static boolean boiteExists(EntityManager em, Integer boite) {
+        return boiteExists(em, boite, null);
+    }
+
+    public static boolean boiteExists(EntityManager em, Integer boite, String filiale) {
         if (boite == null) {
             return false;
         }
 
-        Long count = em.createQuery(
-                        "select count(e) from " + ArchEmplacement.class.getSimpleName() + " e where e.boite = :boite",
-                        Long.class)
-                .setParameter("boite", boite)
-                .getSingleResult();
-        return count != null && count > 0;
+        return findEmplacementByBoite(em, boite, filiale) != null;
     }
 
     public static List<Integer> normalizeBoites(Collection<Integer> rawBoites) {
@@ -102,23 +102,63 @@ public final class DossierEmpUtil {
     }
 
     public static ArchEmplacement findPrimaryEmplacement(EntityManager em, Long idDossier) {
-        return findEmplacementByBoite(em, findPrimaryBoite(em, idDossier));
+        if (idDossier == null) {
+            return null;
+        }
+        ArchDossier dossier = em.find(ArchDossier.class, idDossier);
+        return findPrimaryEmplacement(em, dossier);
+    }
+
+    public static ArchEmplacement findPrimaryEmplacement(EntityManager em, ArchDossier dossier) {
+        if (dossier == null) {
+            return null;
+        }
+
+        String filiale = resolveDossierFiliale(dossier);
+        return findEmplacementByBoite(em, findPrimaryBoite(em, dossier.getIdDossier()), filiale);
     }
 
     public static ArchEmplacement findEmplacementByBoite(EntityManager em, Integer boite) {
+        return findEmplacementByBoite(em, boite, null);
+    }
+
+    public static ArchEmplacement findEmplacementByBoite(EntityManager em, Integer boite, String filiale) {
         if (boite == null) {
             return null;
         }
 
-        List<ArchEmplacement> rows = em.createQuery(
-                        "select e from " + ArchEmplacement.class.getSimpleName() + " e " +
-                                "where e.boite = :boite " +
-                                "order by e.idEmplacement",
-                        ArchEmplacement.class)
+        String normalizedFiliale = FilialeUtil.normalizeKey(filiale);
+        String jpql = "select e from " + ArchEmplacement.class.getSimpleName() + " e " +
+                "where e.boite = :boite ";
+        if (!normalizedFiliale.isBlank()) {
+            jpql += "and lower(trim(e.filiale)) = :filiale ";
+        }
+        jpql += "order by e.idEmplacement";
+
+        var query = em.createQuery(jpql, ArchEmplacement.class)
                 .setParameter("boite", boite)
-                .setMaxResults(1)
-                .getResultList();
+                .setMaxResults(1);
+        if (!normalizedFiliale.isBlank()) {
+            query.setParameter("filiale", normalizedFiliale);
+        }
+
+        List<ArchEmplacement> rows = query.getResultList();
         return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    public static List<Integer> findBoitesByFiliale(EntityManager em, String filiale) {
+        String normalizedFiliale = FilialeUtil.normalizeKey(filiale);
+        if (normalizedFiliale.isBlank()) {
+            return Collections.emptyList();
+        }
+
+        return em.createQuery(
+                        "select distinct e.boite from " + ArchEmplacement.class.getSimpleName() + " e " +
+                                "where e.boite is not null and lower(trim(e.filiale)) = :filiale " +
+                                "order by e.boite",
+                        Integer.class)
+                .setParameter("filiale", normalizedFiliale)
+                .getResultList();
     }
 
     public static void replaceBoites(EntityManager em, Long idDossier, String pin, String relation, Collection<Integer> rawBoites) {
@@ -172,6 +212,25 @@ public final class DossierEmpUtil {
 
     public static String findBoitesSummary(EntityManager em, Long idDossier) {
         return formatBoites(findBoitesByDossierId(em, idDossier));
+    }
+
+    public static boolean matchesSessionFiliale(ArchDossier dossier, String filiale) {
+        return dossier != null && FilialeUtil.matches(dossier.getFiliale(), dossier.getIdFiliale(), filiale);
+    }
+
+    public static boolean matchesSessionFiliale(ArchEmplacement emplacement, String filiale) {
+        return emplacement != null && FilialeUtil.matches(emplacement.getFiliale(), null, filiale);
+    }
+
+    private static String resolveDossierFiliale(ArchDossier dossier) {
+        if (dossier == null) {
+            return "";
+        }
+        String current = FilialeUtil.normalizeKey(dossier.getFiliale());
+        if (!current.isBlank()) {
+            return current;
+        }
+        return FilialeUtil.normalizeKey(dossier.getIdFiliale());
     }
 
     private static String safeTrim(String value) {

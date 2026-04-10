@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Set;
 
 import com.btk.model.Utilisateur;
+import com.btk.util.DemandeFilialeUtil;
+import com.btk.util.FilialeUtil;
 
 import jakarta.enterprise.context.SessionScoped;
 import jakarta.faces.application.FacesMessage;
@@ -414,16 +416,18 @@ public class LoginBean implements Serializable {
         }
         Set<String> currentKeys = new HashSet<>();
 
-        long pendingCount = toLongValue(em.createNativeQuery(
-                        "SELECT COUNT(*) FROM DEMANDE_DOSSIER " +
-                        "WHERE DATE_APPROUVE IS NULL " +
-                        "AND DATE_RESTITUTION IS NULL")
+        long pendingCount = toLongValue(createScopedAdminDemandeQuery(
+                        em,
+                        "SELECT COUNT(*)",
+                        "DATE_APPROUVE IS NULL AND DATE_RESTITUTION IS NULL",
+                        null)
                 .getSingleResult());
 
-        long returnedCount = toLongValue(em.createNativeQuery(
-                        "SELECT COUNT(*) FROM DEMANDE_DOSSIER " +
-                        "WHERE DATE_APPROUVE IS NOT NULL " +
-                        "AND DATE_RESTITUTION IS NOT NULL")
+        long returnedCount = toLongValue(createScopedAdminDemandeQuery(
+                        em,
+                        "SELECT COUNT(*)",
+                        "DATE_APPROUVE IS NOT NULL AND DATE_RESTITUTION IS NOT NULL",
+                        null)
                 .getSingleResult());
 
         List<NotificationItem> loaded = new ArrayList<>();
@@ -440,12 +444,11 @@ public class LoginBean implements Serializable {
             ));
 
             @SuppressWarnings("unchecked")
-            List<Object[]> pendingRows = em.createNativeQuery(
-                            "SELECT ID_DEMANDE, PIN, DATE_ENVOI " +
-                                    "FROM DEMANDE_DOSSIER " +
-                                    "WHERE DATE_APPROUVE IS NULL " +
-                                    "AND DATE_RESTITUTION IS NULL " +
-                                    "ORDER BY DATE_ENVOI DESC")
+            List<Object[]> pendingRows = createScopedAdminDemandeQuery(
+                            em,
+                            "SELECT ID_DEMANDE, PIN, DATE_ENVOI",
+                            "DATE_APPROUVE IS NULL AND DATE_RESTITUTION IS NULL",
+                            "DATE_ENVOI DESC")
                     .setMaxResults(5)
                     .getResultList();
 
@@ -479,12 +482,11 @@ public class LoginBean implements Serializable {
             ));
 
             @SuppressWarnings("unchecked")
-            List<Object[]> returnedRows = em.createNativeQuery(
-                            "SELECT ID_DEMANDE, PIN, DATE_RESTITUTION " +
-                                    "FROM DEMANDE_DOSSIER " +
-                                    "WHERE DATE_APPROUVE IS NOT NULL " +
-                                    "AND DATE_RESTITUTION IS NOT NULL " +
-                                    "ORDER BY DATE_RESTITUTION DESC")
+            List<Object[]> returnedRows = createScopedAdminDemandeQuery(
+                            em,
+                            "SELECT ID_DEMANDE, PIN, DATE_RESTITUTION",
+                            "DATE_APPROUVE IS NOT NULL AND DATE_RESTITUTION IS NOT NULL",
+                            "DATE_RESTITUTION DESC")
                     .setMaxResults(5)
                     .getResultList();
 
@@ -744,6 +746,28 @@ public class LoginBean implements Serializable {
         notificationsPrimed = false;
     }
 
+    private Query createScopedAdminDemandeQuery(EntityManager em, String selectClause, String additionalWhere, String orderByClause) {
+        String filiale = getCurrentFilialeCode();
+        String legacyFiliale = getCurrentFilialeId();
+        String filialePredicate = DemandeFilialeUtil.buildPredicate(em, "dd", filiale, legacyFiliale);
+
+        StringBuilder sql = new StringBuilder(selectClause)
+                .append(" FROM DEMANDE_DOSSIER dd ")
+                .append("WHERE ")
+                .append(filialePredicate);
+
+        if (additionalWhere != null && !additionalWhere.isBlank()) {
+            sql.append(" AND ").append(additionalWhere);
+        }
+        if (orderByClause != null && !orderByClause.isBlank()) {
+            sql.append(" ORDER BY ").append(orderByClause);
+        }
+
+        Query query = em.createNativeQuery(sql.toString());
+        DemandeFilialeUtil.bindParameters(query, filiale, legacyFiliale);
+        return query;
+    }
+
     private boolean isNotificationNew(String key, Set<String> currentKeys) {
         return isNotificationNew(key, currentKeys, true, false);
     }
@@ -912,6 +936,18 @@ public class LoginBean implements Serializable {
         return "finance".equals(normalize(utilisateur == null ? null : utilisateur.getPuti()));
     }
 
+    public String getCurrentFilialeCode() {
+        return FilialeUtil.normalizeKey(utilisateur == null ? null : utilisateur.getPuti());
+    }
+
+    public String getCurrentFilialeId() {
+        return FilialeUtil.toLegacyId(getCurrentFilialeCode());
+    }
+
+    public String getCurrentFilialeLabel() {
+        return FilialeUtil.toLabel(getCurrentFilialeCode());
+    }
+
     public boolean isAdminRole() {
         String role = normalize(utilisateur == null ? null : utilisateur.getRole());
         return "admin".equals(role) || "super_admin".equals(role);
@@ -940,10 +976,11 @@ public class LoginBean implements Serializable {
 
         EntityManager em = getEMF().createEntityManager();
         try {
-            Number count = (Number) em.createNativeQuery(
-                            "SELECT COUNT(*) FROM DEMANDE_DOSSIER " +
-                            "WHERE DATE_APPROUVE IS NULL " +
-                            "AND DATE_RESTITUTION IS NULL")
+            Number count = (Number) createScopedAdminDemandeQuery(
+                            em,
+                            "SELECT COUNT(*)",
+                            "DATE_APPROUVE IS NULL AND DATE_RESTITUTION IS NULL",
+                            null)
                     .getSingleResult();
             return count == null ? 0L : count.longValue();
         } catch (RuntimeException e) {

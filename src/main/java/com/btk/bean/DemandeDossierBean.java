@@ -5,7 +5,9 @@ import java.util.List;
 import java.util.Locale;
 
 import com.btk.model.ArchDossier;
+import com.btk.util.DemandeFilialeUtil;
 import com.btk.util.DossierEmpUtil;
+import com.btk.util.FilialeUtil;
 
 import jakarta.annotation.Resource;
 import jakarta.faces.application.FacesMessage;
@@ -16,6 +18,7 @@ import jakarta.inject.Named;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
+import jakarta.persistence.Query;
 import jakarta.persistence.TypedQuery;
 import jakarta.transaction.HeuristicMixedException;
 import jakarta.transaction.HeuristicRollbackException;
@@ -87,9 +90,13 @@ public class DemandeDossierBean implements Serializable {
         TypedQuery<ArchDossier> query = em.createQuery(
                 "select d from " + ArchDossier.class.getSimpleName() + " d " +
                         "where upper(trim(d." + field + ")) = :searchValue " +
+                        "and (lower(trim(d.filiale)) = :filiale " +
+                        "or (d.filiale is null and lower(trim(d.idFiliale)) = :legacyFiliale)) " +
                         "order by d.idDossier desc",
                 ArchDossier.class);
         query.setParameter("searchValue", searchValue);
+        query.setParameter("filiale", resolveSessionFiliale());
+        query.setParameter("legacyFiliale", resolveSessionLegacyFiliale());
         query.setMaxResults(1);
 
         List<ArchDossier> rows = query.getResultList();
@@ -134,17 +141,25 @@ public class DemandeDossierBean implements Serializable {
                             "SELECT NVL(MAX(ID_DEMANDE), 0) + 1 FROM DEMANDE_DOSSIER")
                     .getSingleResult();
 
-            em.createNativeQuery(
-                            "INSERT INTO DEMANDE_DOSSIER " +
-                                    "(ID_DEMANDE, PIN, BOITE, EMETTEUR, RECEPTEUR, DATE_ENVOI, DATE_APPROUVE, DATE_RESTITUTION, TYPE_DEMANDE, COMMENTAIRE) " +
-                                    "VALUES (:id, :pin, :boite, :emetteur, NULL, SYSDATE, NULL, NULL, :typeDemande, :commentaire)")
+            boolean hasFilialeColumn = DemandeFilialeUtil.hasFilialeColumn(em);
+            Query insertQuery = em.createNativeQuery(
+                            hasFilialeColumn
+                                    ? "INSERT INTO DEMANDE_DOSSIER " +
+                                      "(ID_DEMANDE, PIN, BOITE, EMETTEUR, RECEPTEUR, DATE_ENVOI, DATE_APPROUVE, DATE_RESTITUTION, TYPE_DEMANDE, COMMENTAIRE, FILIALE) " +
+                                      "VALUES (:id, :pin, :boite, :emetteur, NULL, SYSDATE, NULL, NULL, :typeDemande, :commentaire, :filiale)"
+                                    : "INSERT INTO DEMANDE_DOSSIER " +
+                                      "(ID_DEMANDE, PIN, BOITE, EMETTEUR, RECEPTEUR, DATE_ENVOI, DATE_APPROUVE, DATE_RESTITUTION, TYPE_DEMANDE, COMMENTAIRE) " +
+                                      "VALUES (:id, :pin, :boite, :emetteur, NULL, SYSDATE, NULL, NULL, :typeDemande, :commentaire)")
                     .setParameter("id", nextId == null ? 1L : nextId.longValue())
                     .setParameter("pin", cleanPin)
                     .setParameter("boite", cleanBoite)
                     .setParameter("emetteur", emetteur)
                     .setParameter("typeDemande", cleanTypeDemande)
-                    .setParameter("commentaire", cleanCommentaire)
-                    .executeUpdate();
+                    .setParameter("commentaire", cleanCommentaire);
+            if (hasFilialeColumn) {
+                insertQuery.setParameter("filiale", resolveSessionFiliale());
+            }
+            insertQuery.executeUpdate();
 
             utx.commit();
             txStarted = false;
@@ -266,5 +281,16 @@ public class DemandeDossierBean implements Serializable {
 
     public boolean isDossierLoaded() {
         return dossierLoaded;
+    }
+
+    private String resolveSessionFiliale() {
+        return loginBean == null ? "" : loginBean.getCurrentFilialeCode();
+    }
+
+    private String resolveSessionLegacyFiliale() {
+        if (loginBean != null) {
+            return loginBean.getCurrentFilialeId();
+        }
+        return FilialeUtil.toLegacyId("");
     }
 }

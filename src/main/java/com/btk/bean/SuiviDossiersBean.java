@@ -10,6 +10,8 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 
+import com.btk.util.DemandeFilialeUtil;
+
 import jakarta.annotation.PostConstruct;
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
@@ -49,20 +51,25 @@ public class SuiviDossiersBean implements Serializable {
             if (selectedCharge != null && !selectedCharge.isBlank() && selectedOption == null) {
                 selectedCharge = null;
             }
+            String filiale = resolveSessionFiliale();
+            String legacyFiliale = resolveSessionLegacyFiliale();
+            String filialePredicate = DemandeFilialeUtil.buildPredicate(em, "dd", filiale, legacyFiliale);
 
             StringBuilder sql = new StringBuilder(
                     "SELECT ID_DEMANDE, PIN, BOITE, EMETTEUR, RECEPTEUR, DATE_ENVOI, DATE_APPROUVE, DATE_RESTITUTION " +
-                    "FROM DEMANDE_DOSSIER");
+                    "FROM DEMANDE_DOSSIER dd " +
+                    "WHERE " + filialePredicate);
 
             if (selectedOption != null) {
-                sql.append(" WHERE UPPER(TRIM(EMETTEUR)) IN (UPPER(TRIM(?)), UPPER(TRIM(?)))");
+                sql.append(" AND UPPER(TRIM(EMETTEUR)) IN (UPPER(TRIM(:selectedUnix)), UPPER(TRIM(:selectedCuti)))");
             }
             sql.append(" ORDER BY DATE_ENVOI DESC");
 
             Query query = em.createNativeQuery(sql.toString());
+            DemandeFilialeUtil.bindParameters(query, filiale, legacyFiliale);
             if (selectedOption != null) {
-                query.setParameter(1, selectedOption.getUnix());
-                query.setParameter(2, selectedOption.getCuti());
+                query.setParameter("selectedUnix", selectedOption.getUnix());
+                query.setParameter("selectedCuti", selectedOption.getCuti());
             }
 
             @SuppressWarnings("unchecked")
@@ -178,12 +185,18 @@ public class SuiviDossiersBean implements Serializable {
     }
 
     private List<ChargeOption> loadConsultationOptions(EntityManager em) {
+        String filiale = resolveSessionFiliale();
+        String legacyFiliale = resolveSessionLegacyFiliale();
+
         @SuppressWarnings("unchecked")
         List<Object[]> rows = em.createNativeQuery(
                         "SELECT CUTI, UNIX, LIB " +
                         "FROM ARCH_UTILISATEURS " +
                         "WHERE UPPER(TRIM(ROLE)) = 'CONSULTATION' " +
+                        "AND (LOWER(TRIM(PUTI)) = :sessionFiliale OR LOWER(TRIM(PUTI)) = :sessionLegacyFiliale) " +
                         "ORDER BY UPPER(TRIM(NVL(LIB, UNIX))), UPPER(TRIM(CUTI))")
+                .setParameter("sessionFiliale", filiale)
+                .setParameter("sessionLegacyFiliale", legacyFiliale)
                 .getResultList();
 
         List<ChargeOption> options = new ArrayList<>();
@@ -239,6 +252,14 @@ public class SuiviDossiersBean implements Serializable {
 
     private String normalize(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private String resolveSessionFiliale() {
+        return loginBean == null ? "" : loginBean.getCurrentFilialeCode();
+    }
+
+    private String resolveSessionLegacyFiliale() {
+        return loginBean == null ? "" : loginBean.getCurrentFilialeId();
     }
 
     private void addInfo(String message) {

@@ -17,6 +17,7 @@ import java.util.Set;
 
 import com.btk.model.ArchDossier;
 import com.btk.util.DossierEmpUtil;
+import com.btk.util.FilialeUtil;
 import com.lowagie.text.Document;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
@@ -34,6 +35,7 @@ import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.ExternalContext;
 import jakarta.faces.context.FacesContext;
 import jakarta.faces.view.ViewScoped;
+import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
@@ -45,6 +47,9 @@ public class ListeArchivesBean implements Serializable {
 
     private static final long serialVersionUID = 1L;
     private static EntityManagerFactory emf;
+
+    @Inject
+    private LoginBean loginBean;
 
     private List<ArchiveRow> archives = Collections.emptyList();
 
@@ -104,8 +109,12 @@ public class ListeArchivesBean implements Serializable {
 
             List<ArchDossier> rows = em.createQuery(
                             "select d from " + ArchDossier.class.getSimpleName() + " d " +
+                                    "where (lower(trim(d.filiale)) = :filiale " +
+                                    "or (d.filiale is null and lower(trim(d.idFiliale)) = :legacyFiliale)) " +
                                     "order by d.idDossier desc",
                             ArchDossier.class)
+                    .setParameter("filiale", resolveSessionFiliale())
+                    .setParameter("legacyFiliale", resolveSessionLegacyFiliale())
                     .getResultList();
 
             List<Long> dossierIds = new ArrayList<>(rows.size());
@@ -124,7 +133,7 @@ public class ListeArchivesBean implements Serializable {
                 String relation = toStringValue(row.getRelation());
                 String charge = toStringValue(row.getCharge());
                 String typeArchive = toTypeArchiveLabel(toStringValue(row.getTypeArchive()));
-                String filiale = toFilialeLabel(toStringValue(row.getIdFiliale()));
+                String filiale = toFilialeLabel(resolveFilialeValue(row));
                 String boite = DossierEmpUtil.formatBoites(boitesByDossier.get(idDossier));
 
                 String dossierName = buildDossierName(idDossier, relation, pin).toUpperCase(Locale.ROOT);
@@ -276,16 +285,7 @@ public class ListeArchivesBean implements Serializable {
     }
 
     private String toFilialeLabel(String filialeId) {
-        if (filialeId == null || filialeId.isBlank()) {
-            return filialeId;
-        }
-        if ("btk-bank".equalsIgnoreCase(filialeId)) {
-            return "BTK Bank";
-        }
-        if ("btk-finance".equalsIgnoreCase(filialeId)) {
-            return "BTK Finance";
-        }
-        return filialeId;
+        return FilialeUtil.toLabel(filialeId);
     }
 
     private String toTypeArchiveLabel(String value) {
@@ -321,6 +321,25 @@ public class ListeArchivesBean implements Serializable {
 
     public List<ArchiveRow> getArchives() {
         return archives;
+    }
+
+    private String resolveFilialeValue(ArchDossier dossier) {
+        if (dossier == null) {
+            return "";
+        }
+        String value = dossier.getFiliale();
+        if (value == null || value.isBlank()) {
+            value = dossier.getIdFiliale();
+        }
+        return toStringValue(value);
+    }
+
+    private String resolveSessionFiliale() {
+        return loginBean == null ? "" : loginBean.getCurrentFilialeCode();
+    }
+
+    private String resolveSessionLegacyFiliale() {
+        return loginBean == null ? "" : loginBean.getCurrentFilialeId();
     }
 
     public static class ArchiveRow implements Serializable {

@@ -4,14 +4,17 @@ import java.io.Serializable;
 import java.util.Collections;
 import java.util.List;
 
+import com.btk.model.ArchDossier;
 import com.btk.model.ArchEmplacement;
 import com.btk.model.DossierEmp;
+import com.btk.util.FilialeUtil;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
 import jakarta.faces.view.ViewScoped;
+import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
@@ -33,6 +36,9 @@ public class BoiteBean implements Serializable {
 
     @Resource
     private UserTransaction utx;
+
+    @Inject
+    private LoginBean loginBean;
 
     private List<ArchEmplacement> emplacements = Collections.emptyList();
 
@@ -97,10 +103,13 @@ public class BoiteBean implements Serializable {
         EntityManager em = getEMF().createEntityManager();
         boolean txStarted = false;
         try {
+            String sessionFiliale = resolveSessionFiliale();
             Long existing = em.createQuery(
-                            "select count(e) from " + ArchEmplacement.class.getSimpleName() + " e where e.boite = :boite",
+                            "select count(e) from " + ArchEmplacement.class.getSimpleName() + " e " +
+                                    "where e.boite = :boite and lower(trim(e.filiale)) = :filiale",
                             Long.class)
                     .setParameter("boite", boiteValue)
+                    .setParameter("filiale", sessionFiliale)
                     .getSingleResult();
 
             boolean existsInBoiteTable = archBoiteExists(em, boiteValue);
@@ -130,6 +139,7 @@ public class BoiteBean implements Serializable {
             emplacement.setRayon(rayon);
             emplacement.setRangee(rangee);
             emplacement.setBoite(boiteValue);
+            emplacement.setFiliale(sessionFiliale);
 
             em.persist(emplacement);
             em.flush();
@@ -169,10 +179,13 @@ public class BoiteBean implements Serializable {
         EntityManager em = getEMF().createEntityManager();
         boolean txStarted = false;
         try {
+            String sessionFiliale = resolveSessionFiliale();
             Long existing = em.createQuery(
-                            "select count(e) from " + ArchEmplacement.class.getSimpleName() + " e where e.boite = :boite",
+                            "select count(e) from " + ArchEmplacement.class.getSimpleName() + " e " +
+                                    "where e.boite = :boite and lower(trim(e.filiale)) = :filiale",
                             Long.class)
                     .setParameter("boite", boiteValue)
+                    .setParameter("filiale", sessionFiliale)
                     .getSingleResult();
 
             boolean existsInBoiteTable = archBoiteExists(em, boiteValue);
@@ -184,10 +197,15 @@ public class BoiteBean implements Serializable {
             }
 
             Long dossiersCount = em.createQuery(
-                            "select count(de) from " + DossierEmp.class.getSimpleName() + " de " +
-                                    "where de.boite = :boite",
+                            "select count(de) from " + DossierEmp.class.getSimpleName() + " de, " +
+                                    ArchDossier.class.getSimpleName() + " d " +
+                                    "where de.boite = :boite and de.idDossier = d.idDossier " +
+                                    "and (lower(trim(d.filiale)) = :filiale " +
+                                    "or (d.filiale is null and lower(trim(d.idFiliale)) = :legacyFiliale))",
                             Long.class)
                     .setParameter("boite", boiteValue)
+                    .setParameter("filiale", sessionFiliale)
+                    .setParameter("legacyFiliale", resolveSessionLegacyFiliale())
                     .getSingleResult();
 
             if (dossiersCount != null && dossiersCount > 0) {
@@ -201,8 +219,10 @@ public class BoiteBean implements Serializable {
             em.joinTransaction();
 
             em.createQuery(
-                            "delete from " + ArchEmplacement.class.getSimpleName() + " e where e.boite = :boite")
+                            "delete from " + ArchEmplacement.class.getSimpleName() + " e " +
+                                    "where e.boite = :boite and lower(trim(e.filiale)) = :filiale")
                     .setParameter("boite", boiteValue)
+                    .setParameter("filiale", sessionFiliale)
                     .executeUpdate();
 
             deleteArchBoite(em, boiteValue);
@@ -248,8 +268,10 @@ public class BoiteBean implements Serializable {
         try {
             emplacements = em.createQuery(
                             "select e from " + ArchEmplacement.class.getSimpleName() + " e " +
+                                    "where lower(trim(e.filiale)) = :filiale " +
                                     "order by e.boite desc, e.etage, e.salle, e.rayon, e.rangee",
                             ArchEmplacement.class)
+                    .setParameter("filiale", resolveSessionFiliale())
                     .getResultList();
         } finally {
             em.close();
@@ -285,10 +307,16 @@ public class BoiteBean implements Serializable {
             if (whereClause != null && !whereClause.isBlank()) {
                 jpql.append(" where ").append(whereClause);
             }
+            if (whereClause == null || whereClause.isBlank()) {
+                jpql.append(" where lower(trim(e.filiale)) = :filiale");
+            } else {
+                jpql.append(" and lower(trim(e.filiale)) = :filiale");
+            }
 
             jpql.append(" order by e.").append(field);
 
             var query = em.createQuery(jpql.toString(), Integer.class);
+            query.setParameter("filiale", resolveSessionFiliale());
 
             if (whereClause != null && whereClause.contains(":etage")) {
                 query.setParameter("etage", etage);
@@ -356,10 +384,14 @@ public class BoiteBean implements Serializable {
     public List<Integer> getSalles() { return salles; }
     public List<Integer> getRayons() { return rayons; }
     public List<Integer> getRangees() { return rangees; }
+    public String getCurrentFilialeLabel() { return FilialeUtil.toLabel(resolveSessionFiliale()); }
 
     private boolean archBoiteExists(EntityManager em, Integer boiteValue) {
-        Object count = em.createNativeQuery("select count(1) from ARCH_BOITE where BOITE = :boite")
+        Object count = em.createNativeQuery(
+                        "select count(1) from ARCH_BOITE " +
+                        "where BOITE = :boite and lower(trim(FILIALE)) = :filiale")
                 .setParameter("boite", boiteValue)
+                .setParameter("filiale", resolveSessionFiliale())
                 .getSingleResult();
         if (count instanceof Number) {
             return ((Number) count).longValue() > 0;
@@ -368,14 +400,28 @@ public class BoiteBean implements Serializable {
     }
 
     private void insertArchBoite(EntityManager em, Integer boiteValue) {
-        em.createNativeQuery("insert into ARCH_BOITE (BOITE, DATE_CREATION) values (:boite, SYSDATE)")
+        em.createNativeQuery(
+                        "insert into ARCH_BOITE (BOITE, DATE_CREATION, FILIALE) " +
+                        "values (:boite, SYSDATE, :filiale)")
                 .setParameter("boite", boiteValue)
+                .setParameter("filiale", resolveSessionFiliale())
                 .executeUpdate();
     }
 
     private void deleteArchBoite(EntityManager em, Integer boiteValue) {
-        em.createNativeQuery("delete from ARCH_BOITE where BOITE = :boite")
+        em.createNativeQuery(
+                        "delete from ARCH_BOITE " +
+                        "where BOITE = :boite and lower(trim(FILIALE)) = :filiale")
                 .setParameter("boite", boiteValue)
+                .setParameter("filiale", resolveSessionFiliale())
                 .executeUpdate();
+    }
+
+    private String resolveSessionFiliale() {
+        return loginBean == null ? "" : loginBean.getCurrentFilialeCode();
+    }
+
+    private String resolveSessionLegacyFiliale() {
+        return loginBean == null ? "" : loginBean.getCurrentFilialeId();
     }
 }

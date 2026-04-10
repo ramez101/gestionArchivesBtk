@@ -6,6 +6,8 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 
+import com.btk.util.DemandeFilialeUtil;
+
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import jakarta.faces.application.FacesMessage;
@@ -16,6 +18,7 @@ import jakarta.inject.Named;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
+import jakarta.persistence.Query;
 import jakarta.transaction.HeuristicMixedException;
 import jakarta.transaction.HeuristicRollbackException;
 import jakarta.transaction.NotSupportedException;
@@ -51,12 +54,19 @@ public class ListeDemandesBean implements Serializable {
 
         EntityManager em = getEMF().createEntityManager();
         try {
+            String filiale = resolveSessionFiliale();
+            String legacyFiliale = resolveSessionLegacyFiliale();
+            String filialePredicate = DemandeFilialeUtil.buildPredicate(em, "dd", filiale, legacyFiliale);
+
+            Query query = em.createNativeQuery(
+                    "SELECT ID_DEMANDE, PIN, BOITE, EMETTEUR, RECEPTEUR, DATE_ENVOI, DATE_APPROUVE, DATE_RESTITUTION, TYPE_DEMANDE, COMMENTAIRE " +
+                            "FROM DEMANDE_DOSSIER dd " +
+                            "WHERE " + filialePredicate + " " +
+                            "ORDER BY DATE_ENVOI DESC");
+            DemandeFilialeUtil.bindParameters(query, filiale, legacyFiliale);
+
             @SuppressWarnings("unchecked")
-            List<Object[]> rows = em.createNativeQuery(
-                            "SELECT ID_DEMANDE, PIN, BOITE, EMETTEUR, RECEPTEUR, DATE_ENVOI, DATE_APPROUVE, DATE_RESTITUTION, TYPE_DEMANDE, COMMENTAIRE " +
-                                    "FROM DEMANDE_DOSSIER " +
-                                    "ORDER BY DATE_ENVOI DESC")
-                    .getResultList();
+            List<Object[]> rows = query.getResultList();
 
             List<DemandeRow> loaded = new ArrayList<>();
             for (Object[] row : rows) {
@@ -116,21 +126,28 @@ public class ListeDemandesBean implements Serializable {
             em.joinTransaction();
 
             String decisionReceiver = resolveDecisionReceiver();
+            String filiale = resolveSessionFiliale();
+            String legacyFiliale = resolveSessionLegacyFiliale();
+            String filialePredicate = DemandeFilialeUtil.buildPredicate(em, "DEMANDE_DOSSIER", filiale, legacyFiliale);
             String sql;
             if (approve) {
                 sql = "UPDATE DEMANDE_DOSSIER " +
-                        "SET DATE_APPROUVE = SYSDATE, DATE_RESTITUTION = NULL, RECEPTEUR = ? " +
-                        "WHERE ID_DEMANDE = ? AND DATE_APPROUVE IS NULL AND DATE_RESTITUTION IS NULL";
+                        "SET DATE_APPROUVE = SYSDATE, DATE_RESTITUTION = NULL, RECEPTEUR = :receiver " +
+                        "WHERE ID_DEMANDE = :id AND DATE_APPROUVE IS NULL AND DATE_RESTITUTION IS NULL " +
+                        "AND " + filialePredicate;
             } else {
                 sql = "UPDATE DEMANDE_DOSSIER " +
-                        "SET DATE_RESTITUTION = SYSDATE, RECEPTEUR = ? " +
-                        "WHERE ID_DEMANDE = ? AND DATE_APPROUVE IS NULL AND DATE_RESTITUTION IS NULL";
+                        "SET DATE_RESTITUTION = SYSDATE, RECEPTEUR = :receiver " +
+                        "WHERE ID_DEMANDE = :id AND DATE_APPROUVE IS NULL AND DATE_RESTITUTION IS NULL " +
+                        "AND " + filialePredicate;
             }
 
-            int updated = em.createNativeQuery(sql)
-                    .setParameter(1, decisionReceiver)
-                    .setParameter(2, row.getIdDemande())
-                    .executeUpdate();
+            Query query = em.createNativeQuery(sql)
+                    .setParameter("receiver", decisionReceiver)
+                    .setParameter("id", row.getIdDemande());
+            DemandeFilialeUtil.bindParameters(query, filiale, legacyFiliale);
+
+            int updated = query.executeUpdate();
 
             if (updated == 0) {
                 if (txStarted) {
@@ -163,6 +180,14 @@ public class ListeDemandesBean implements Serializable {
 
     private String normalize(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private String resolveSessionFiliale() {
+        return loginBean == null ? "" : loginBean.getCurrentFilialeCode();
+    }
+
+    private String resolveSessionLegacyFiliale() {
+        return loginBean == null ? "" : loginBean.getCurrentFilialeId();
     }
 
     private String resolveDecisionReceiver() {

@@ -6,11 +6,13 @@ import java.util.List;
 
 import com.btk.model.ArchDossier;
 import com.btk.util.DossierEmpUtil;
+import com.btk.util.FilialeUtil;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
 import jakarta.faces.view.ViewScoped;
+import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
@@ -23,6 +25,9 @@ public class ConsultationBoitesBean implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private static EntityManagerFactory emf;
+
+    @Inject
+    private LoginBean loginBean;
 
     private String searchBoite;
     private List<ArchDossier> dossiers = Collections.emptyList();
@@ -57,9 +62,13 @@ public class ConsultationBoitesBean implements Serializable {
                             "select d from " + ArchDossier.class.getSimpleName() + " d " +
                                     "where d.idDossier in (" +
                                     "select de.idDossier from DossierEmp de where de.boite = :boite" +
-                                    ") order by d.pin, d.relation, d.idDossier",
+                                    ") and (lower(trim(d.filiale)) = :filiale " +
+                                    "or (d.filiale is null and lower(trim(d.idFiliale)) = :legacyFiliale)) " +
+                                    "order by d.pin, d.relation, d.idDossier",
                             ArchDossier.class)
                     .setParameter("boite", boite)
+                    .setParameter("filiale", resolveSessionFiliale())
+                    .setParameter("legacyFiliale", resolveSessionLegacyFiliale())
                     .getResultList();
 
             searched = true;
@@ -129,6 +138,17 @@ public class ConsultationBoitesBean implements Serializable {
         return selectedDossierBoites;
     }
 
+    public String getSelectedDossierFilialeLabel() {
+        if (selectedDossier == null) {
+            return "";
+        }
+        String value = selectedDossier.getFiliale();
+        if (value == null || value.isBlank()) {
+            value = selectedDossier.getIdFiliale();
+        }
+        return FilialeUtil.toLabel(value);
+    }
+
     public boolean isSearched() {
         return searched;
     }
@@ -139,5 +159,13 @@ public class ConsultationBoitesBean implements Serializable {
 
     public boolean isResultLoaded() {
         return resultLoaded;
+    }
+
+    private String resolveSessionFiliale() {
+        return loginBean == null ? "" : loginBean.getCurrentFilialeCode();
+    }
+
+    private String resolveSessionLegacyFiliale() {
+        return loginBean == null ? "" : loginBean.getCurrentFilialeId();
     }
 }

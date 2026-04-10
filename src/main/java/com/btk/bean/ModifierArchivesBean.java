@@ -9,12 +9,14 @@ import java.util.Locale;
 import com.btk.model.ArchDossier;
 import com.btk.model.ArchEmplacement;
 import com.btk.util.DossierEmpUtil;
+import com.btk.util.FilialeUtil;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
 import jakarta.faces.view.ViewScoped;
+import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
@@ -37,6 +39,9 @@ public class ModifierArchivesBean implements Serializable {
 
     @Resource
     private UserTransaction utx;
+
+    @Inject
+    private LoginBean loginBean;
 
     private String searchType = "pin";
     private String searchValue;
@@ -77,9 +82,13 @@ public class ModifierArchivesBean implements Serializable {
             List<ArchDossier> rows = em.createQuery(
                             "select d from " + ArchDossier.class.getSimpleName() + " d " +
                                     "where upper(trim(d." + searchedField + ")) = :value " +
+                                    "and (lower(trim(d.filiale)) = :filiale " +
+                                    "or (d.filiale is null and lower(trim(d.idFiliale)) = :legacyFiliale)) " +
                                     "order by d.idDossier",
                             ArchDossier.class)
                     .setParameter("value", normalizeSearchValue(searchValue))
+                    .setParameter("filiale", resolveSessionFiliale())
+                    .setParameter("legacyFiliale", resolveSessionLegacyFiliale())
                     .setMaxResults(1)
                     .getResultList();
 
@@ -118,6 +127,8 @@ public class ModifierArchivesBean implements Serializable {
         EntityManager em = getEMF().createEntityManager();
         boolean txStarted = false;
         try {
+            String sessionFiliale = resolveSessionFiliale();
+            String sessionLegacyFiliale = resolveSessionLegacyFiliale();
             List<Integer> boitesToSave = DossierEmpUtil.normalizeBoites(resolveBoitesToSave());
             if (boitesToSave.isEmpty()) {
                 addWarn("Ajouter au moins une boite.");
@@ -125,8 +136,28 @@ public class ModifierArchivesBean implements Serializable {
                 return;
             }
 
+            if (pin != null && !pin.isBlank()) {
+                Long existing = em.createQuery(
+                                "select count(d) from " + ArchDossier.class.getSimpleName() + " d " +
+                                        "where d.idDossier <> :idDossier " +
+                                        "and upper(trim(d.pin)) = :pin " +
+                                        "and (lower(trim(d.filiale)) = :filiale " +
+                                        "or (d.filiale is null and lower(trim(d.idFiliale)) = :legacyFiliale))",
+                                Long.class)
+                        .setParameter("idDossier", dossierId)
+                        .setParameter("pin", pin.trim().toUpperCase(Locale.ROOT))
+                        .setParameter("filiale", sessionFiliale)
+                        .setParameter("legacyFiliale", sessionLegacyFiliale)
+                        .getSingleResult();
+                if (existing != null && existing > 0) {
+                    addWarn("Pin deja utilise dans cette filiale.");
+                    markValidationFailed();
+                    return;
+                }
+            }
+
             for (Integer boiteValue : boitesToSave) {
-                if (!DossierEmpUtil.boiteExists(em, boiteValue)) {
+                if (!DossierEmpUtil.boiteExists(em, boiteValue, sessionFiliale)) {
                     addError("La boite " + boiteValue + " est introuvable.");
                     markValidationFailed();
                     return;
@@ -149,7 +180,8 @@ public class ModifierArchivesBean implements Serializable {
             dossier.setRelation(relation);
             dossier.setCharge(charge);
             dossier.setTypeArchive(typeArchive);
-            dossier.setIdFiliale(filialeId);
+            dossier.setIdFiliale(sessionLegacyFiliale);
+            dossier.setFiliale(sessionFiliale);
 
             DossierEmpUtil.replaceBoites(em, dossierId, pin, relation, boitesToSave);
             em.flush();
@@ -290,11 +322,7 @@ public class ModifierArchivesBean implements Serializable {
     private List<Integer> fetchBoites() {
         EntityManager em = getEMF().createEntityManager();
         try {
-            return em.createQuery(
-                            "select distinct e.boite from " + ArchEmplacement.class.getSimpleName() + " e " +
-                                    "order by e.boite",
-                            Integer.class)
-                    .getResultList();
+            return DossierEmpUtil.findBoitesByFiliale(em, resolveSessionFiliale());
         } finally {
             em.close();
         }
@@ -333,6 +361,14 @@ public class ModifierArchivesBean implements Serializable {
     public String getFilialeId() { return filialeId; }
     public void setFilialeId(String filialeId) { this.filialeId = filialeId; }
 
+    public String getFilialeLabel() {
+        String current = filialeId;
+        if (current == null || current.isBlank()) {
+            current = resolveSessionFiliale();
+        }
+        return FilialeUtil.toLabel(current);
+    }
+
     public Integer getBoite() { return boite; }
     public void setBoite(Integer boite) { this.boite = boite; }
 
@@ -341,4 +377,12 @@ public class ModifierArchivesBean implements Serializable {
     public Integer getBoiteToRemove() { return boiteToRemove; }
     public void setBoiteToRemove(Integer boiteToRemove) { this.boiteToRemove = boiteToRemove; }
     public String getBoitesSummary() { return DossierEmpUtil.formatBoites(resolveBoitesToSave()); }
+
+    private String resolveSessionFiliale() {
+        return loginBean == null ? "" : loginBean.getCurrentFilialeCode();
+    }
+
+    private String resolveSessionLegacyFiliale() {
+        return loginBean == null ? "" : loginBean.getCurrentFilialeId();
+    }
 }

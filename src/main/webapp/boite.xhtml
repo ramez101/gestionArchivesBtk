@@ -6,7 +6,7 @@
                 xmlns:h="jakarta.faces.html"
                 xmlns:f="jakarta.faces.core"
                 xmlns:p="http://primefaces.org/ui"
-                template="/WEB-INF/templates/app.xhtml">
+                template="#{loginBean.bankProfile ? '/WEB-INF/templates/app-bank.xhtml' : '/WEB-INF/templates/app.xhtml'}">
 
     <ui:define name="title">BTK - Boites</ui:define>
 
@@ -222,6 +222,9 @@
                     <h:panelGroup rendered="#{loginBean.readOnlyBoiteMode}" layout="block" styleClass="boite-readonly-note">
                         Mode consultation : affichage seulement, sans ajout ni suppression.
                     </h:panelGroup>
+                    <h:panelGroup layout="block" styleClass="boite-readonly-note">
+                        Filiale active : #{boiteBean.currentFilialeLabel}
+                    </h:panelGroup>
 
                     <div class="boite-header">
                         <div class="card-title">Boites</div>
@@ -360,6 +363,7 @@
             //<![CDATA[
             (function () {
                 var logoUrl = "#{resource['images:btk.png']}";
+                var sessionFilialeLabel = "#{boiteBean.currentFilialeLabel}";
 
                 function esc(value) {
                     var node = document.createElement('div');
@@ -406,7 +410,7 @@
                             + '<div class="header">'
                             + '<div class="logo-wrap">'
                             + '<img class="logo" src="' + esc(logoUrl) + '" alt="BTK logo"/>'
-                            + '<div><div class="brand">BTK Finance</div><div class="subtitle">Coordonnees de la boite d archive</div></div>'
+                            + '<div><div class="brand">' + esc(sessionFilialeLabel) + '</div><div class="subtitle">Coordonnees de la boite d archive</div></div>'
                             + '</div>'
                             + '</div>'
                             + '<div class="boite-title">'

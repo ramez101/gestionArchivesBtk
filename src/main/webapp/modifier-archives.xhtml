@@ -6,7 +6,7 @@
                 xmlns:h="jakarta.faces.html"
                 xmlns:f="jakarta.faces.core"
                 xmlns:p="http://primefaces.org/ui"
-                template="/WEB-INF/templates/app.xhtml">
+                template="#{loginBean.bankProfile ? '/WEB-INF/templates/app-bank.xhtml' : '/WEB-INF/templates/app.xhtml'}">
 
     <ui:define name="title">BTK - Modifier archives</ui:define>
 
@@ -291,13 +291,10 @@
 
                             <div class="form-row">
                                 <h:outputLabel for="filialeId" value="Filiale"/>
-                                <h:selectOneMenu id="filialeId"
-                                                 value="#{modifierArchivesBean.filialeId}"
-                                                 disabled="#{not modifierArchivesBean.resultLoaded}">
-                                    <f:selectItem itemLabel="Choisir" itemValue="#{null}" noSelectionOption="true"/>
-                                    <f:selectItem itemLabel="BTK Bank" itemValue="btk-bank"/>
-                                    <f:selectItem itemLabel="BTK Finance" itemValue="btk-finance"/>
-                                </h:selectOneMenu>
+                                <h:inputText id="filialeId"
+                                             value="#{modifierArchivesBean.filialeLabel}"
+                                             readonly="true"
+                                             disabled="#{not modifierArchivesBean.resultLoaded}"/>
                             </div>
 
                             <div class="form-row full">

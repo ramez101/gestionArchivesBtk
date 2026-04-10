@@ -6,6 +6,8 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 
+import com.btk.util.DemandeFilialeUtil;
+
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import jakarta.faces.application.FacesMessage;
@@ -16,6 +18,7 @@ import jakarta.inject.Named;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
+import jakarta.persistence.Query;
 import jakarta.transaction.HeuristicMixedException;
 import jakarta.transaction.HeuristicRollbackException;
 import jakarta.transaction.NotSupportedException;
@@ -59,14 +62,22 @@ public class SuiviDemandesBean implements Serializable {
 
         EntityManager em = getEMF().createEntityManager();
         try {
-            @SuppressWarnings("unchecked")
-            List<Object[]> rows = em.createNativeQuery(
+            String filiale = resolveSessionFiliale();
+            String legacyFiliale = resolveSessionLegacyFiliale();
+            String filialePredicate = DemandeFilialeUtil.buildPredicate(em, "dd", filiale, legacyFiliale);
+
+            Query query = em.createNativeQuery(
                             "SELECT ID_DEMANDE, PIN, BOITE, RECEPTEUR, DATE_ENVOI, DATE_APPROUVE, DATE_RESTITUTION " +
-                                    "FROM DEMANDE_DOSSIER " +
-                                    "WHERE UPPER(TRIM(EMETTEUR)) IN (UPPER(TRIM(?)), UPPER(TRIM(?))) " +
-                                    "ORDER BY DATE_ENVOI DESC")
-                    .setParameter(1, unix)
-                    .setParameter(2, cuti)
+                                    "FROM DEMANDE_DOSSIER dd " +
+                                    "WHERE " + filialePredicate + " " +
+                                    "AND UPPER(TRIM(EMETTEUR)) IN (UPPER(TRIM(:emetteurUnix)), UPPER(TRIM(:emetteurCuti))) " +
+                                    "ORDER BY DATE_ENVOI DESC");
+            DemandeFilialeUtil.bindParameters(query, filiale, legacyFiliale);
+
+            @SuppressWarnings("unchecked")
+            List<Object[]> rows = query
+                    .setParameter("emetteurUnix", unix)
+                    .setParameter("emetteurCuti", cuti)
                     .getResultList();
 
             List<SuiviDemandeRow> loaded = new ArrayList<>();
@@ -126,17 +137,24 @@ public class SuiviDemandesBean implements Serializable {
             txStarted = true;
             em.joinTransaction();
 
-            int updated = em.createNativeQuery(
+            String filiale = resolveSessionFiliale();
+            String legacyFiliale = resolveSessionLegacyFiliale();
+            String filialePredicate = DemandeFilialeUtil.buildPredicate(em, "DEMANDE_DOSSIER", filiale, legacyFiliale);
+
+            Query updateQuery = em.createNativeQuery(
                             "UPDATE DEMANDE_DOSSIER " +
                                     "SET DATE_RESTITUTION = SYSDATE " +
-                                    "WHERE ID_DEMANDE = ? " +
+                                    "WHERE ID_DEMANDE = :id " +
                                     "AND DATE_APPROUVE IS NOT NULL " +
                                     "AND DATE_RESTITUTION IS NULL " +
-                                    "AND UPPER(TRIM(EMETTEUR)) IN (UPPER(TRIM(?)), UPPER(TRIM(?)))")
-                    .setParameter(1, row.getIdDemande())
-                    .setParameter(2, unix)
-                    .setParameter(3, cuti)
-                    .executeUpdate();
+                                    "AND UPPER(TRIM(EMETTEUR)) IN (UPPER(TRIM(:emetteurUnix)), UPPER(TRIM(:emetteurCuti))) " +
+                                    "AND " + filialePredicate)
+                    .setParameter("id", row.getIdDemande())
+                    .setParameter("emetteurUnix", unix)
+                    .setParameter("emetteurCuti", cuti);
+            DemandeFilialeUtil.bindParameters(updateQuery, filiale, legacyFiliale);
+
+            int updated = updateQuery.executeUpdate();
 
             if (updated == 0) {
                 if (txStarted) {
@@ -192,6 +210,14 @@ public class SuiviDemandesBean implements Serializable {
 
     private String normalize(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private String resolveSessionFiliale() {
+        return loginBean == null ? "" : loginBean.getCurrentFilialeCode();
+    }
+
+    private String resolveSessionLegacyFiliale() {
+        return loginBean == null ? "" : loginBean.getCurrentFilialeId();
     }
 
     private String toStringValue(Object value) {

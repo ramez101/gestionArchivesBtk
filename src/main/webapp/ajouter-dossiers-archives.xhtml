@@ -6,7 +6,7 @@
                 xmlns:h="jakarta.faces.html"
                 xmlns:f="jakarta.faces.core"
                 xmlns:p="http://primefaces.org/ui"
-                template="/WEB-INF/templates/app.xhtml">
+                template="#{loginBean.bankProfile ? '/WEB-INF/templates/app-bank.xhtml' : '/WEB-INF/templates/app.xhtml'}">
 
     <ui:define name="title">BTK - Ajouter dossiers archives</ui:define>
 
@@ -226,10 +226,9 @@
                         </div>
                         <div class="form-row">
                             <h:outputLabel for="filiale" value="Filiale"/>
-                            <h:selectOneMenu id="filiale" value="#{ajoutDossiersArchivesBean.filialeId}" required="true" requiredMessage="Filiale obligatoire.">
-                                <f:selectItem itemLabel="Choisir" itemValue="#{null}" noSelectionOption="true"/>
-                                <f:selectItem itemLabel="BTK Finance" itemValue="btk-finance"/>
-                                <f:selectItem itemLabel="BTK Leasing" itemValue="btk-leasing"/>                            </h:selectOneMenu>
+                            <h:inputText id="filiale"
+                                         value="#{ajoutDossiersArchivesBean.filialeLabel}"
+                                         readonly="true"/>
                         </div>
                         <div class="form-row full">
                             <h:outputLabel for="boite" value="Boite"/>

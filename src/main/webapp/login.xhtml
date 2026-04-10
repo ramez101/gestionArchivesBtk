@@ -98,7 +98,7 @@
         }
 
         .hero-mark img {
-            max-width: 68px;
+            max-width: 75px;
             height: auto;
         }
 
@@ -275,6 +275,36 @@
             box-shadow: 0 14px 28px rgba(154, 184, 223, .16) !important;
         }
 
+        .password-wrap {
+            position: relative;
+        }
+
+        .password-wrap .ui-password {
+            display: block;
+            width: 100%;
+        }
+
+        .password-wrap .ui-inputfield {
+            padding-right: 52px !important;
+        }
+
+        .password-toggle {
+            position: absolute;
+            top: 50%;
+            right: 12px;
+            transform: translateY(-50%);
+            width: 34px;
+            height: 34px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 1.4rem;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
         .error-msg {
             color: #e74c3c;
             font-size: .68rem;
@@ -315,7 +345,7 @@
             position: relative;
             z-index: 1;
             margin-top: 26px;
-            font-size: .82rem;
+            font-size: 1rem;
             color: rgba(255, 255, 255, .86);
             letter-spacing: .2px;
         }
@@ -430,7 +460,6 @@
                 </div>
 
                 <div class="hero-copy">
-                    <div class="hero-kicker">Banque Tuniso-Koweitienne</div>
                     <h1>Bienvenue sur <strong>Plateforme de gestion des archives</strong></h1>
                 </div>
             </div>
@@ -440,7 +469,6 @@
 
         <div class="login-card">
             <div class="login-header">
-                <div class="eyebrow">Bonjour!</div>
                 <div class="headline">Connexion</div>
                 <div class="subtitle">Veuillez vous connecter à votre compte</div>
             </div>
@@ -461,12 +489,21 @@
 
                 <div class="field">
                     <p:outputLabel for="password" value="Mot de passe"/>
-                    <p:password id="password"
-                                value="#{loginBean.password}"
-                                required="true"
-                                requiredMessage="Le mot de passe est obligatoire."
-                                feedback="false"
-                                placeholder="Mot de passe"/>
+                    <div class="password-wrap">
+                        <p:password id="password"
+                                    value="#{loginBean.password}"
+                                    required="true"
+                                    requiredMessage="Le mot de passe est obligatoire."
+                                    feedback="false"
+                                    placeholder="Mot de passe"/>
+                        <button type="button"
+                                class="password-toggle"
+                                onclick="BTKPassword.toggle('loginForm:password', this)"
+                                aria-label="Afficher le mot de passe"
+                                title="Afficher le mot de passe"
+                                data-show-icon="&#128065;"
+                                data-hide-icon="&#128584;">&#128065;</button>
+                    </div>
                     <p:message for="password" styleClass="error-msg"/>
                 </div>
 
@@ -478,6 +515,29 @@
             </h:form>
         </div>
     </div>
+
+    <script type="text/javascript">
+        var BTKPassword = {
+            toggle: function (inputId, button) {
+                var input = document.getElementById(inputId);
+                if (!input) return;
+
+                var isPassword = input.type === 'password';
+                input.type = isPassword ? 'text' : 'password';
+
+                if (button) {
+                    var label = isPassword
+                        ? 'Masquer le mot de passe'
+                        : 'Afficher le mot de passe';
+                    button.setAttribute('aria-label', label);
+                    button.setAttribute('title', label);
+                    button.textContent = isPassword
+                        ? String.fromCodePoint(0x1F648)
+                        : String.fromCodePoint(0x1F441);
+                }
+            }
+        };
+    </script>
 </h:body>
 
 </html>

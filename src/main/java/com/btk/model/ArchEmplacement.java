@@ -25,8 +25,11 @@ public class ArchEmplacement {
     @Column(name = "RANGEE", nullable = false)
     private Integer rangee;
 
-    @Column(name = "BOITE", nullable = false)
+    @Column(name = "BOITE")
     private Integer boite;
+
+    @Column(name = "FILIALE")
+    private String filiale;
 
     public Integer getIdEmplacement() { return idEmplacement; }
     public void setIdEmplacement(Integer idEmplacement) { this.idEmplacement = idEmplacement; }
@@ -45,4 +48,7 @@ public class ArchEmplacement {
 
     public Integer getBoite() { return boite; }
     public void setBoite(Integer boite) { this.boite = boite; }
+
+    public String getFiliale() { return filiale; }
+    public void setFiliale(String filiale) { this.filiale = filiale; }
 }
