@@ -22,12 +22,43 @@
                     justify-content: space-between;
                     gap: 10px;
                     padding: 6px 4px;
+                    flex-wrap: wrap;
                 }
                 .dashboard-note {
                     font-size: .78rem;
                     letter-spacing: .2px;
                     color: #607d95;
                     font-weight: 600;
+                }
+                .dashboard-controls {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 10px;
+                    margin-left: auto;
+                }
+                .dashboard-nav {
+                    width: 34px;
+                    height: 34px;
+                    border: 1px solid #cfe1f3;
+                    border-radius: 999px;
+                    background: #ffffff;
+                    color: #0a4e75;
+                    font-size: 1rem;
+                    font-weight: 800;
+                    line-height: 1;
+                    cursor: pointer;
+                    box-shadow: 0 4px 12px rgba(15, 57, 86, .06);
+                    transition: transform .2s ease, background-color .2s ease, border-color .2s ease;
+                }
+                .dashboard-nav:hover {
+                    background: #eef6ff;
+                    border-color: #9fc5e8;
+                    transform: translateY(-1px);
+                }
+                .dashboard-nav:focus-visible,
+                .dashboard-dot:focus-visible {
+                    outline: 2px solid #2aa6d9;
+                    outline-offset: 2px;
                 }
                 .dashboard-dots {
                     display: inline-flex;
@@ -39,6 +70,9 @@
                     height: 9px;
                     border-radius: 999px;
                     background: #c6d8ea;
+                    border: none;
+                    padding: 0;
+                    cursor: pointer;
                     transition: all .2s ease;
                 }
                 .dashboard-dot.is-active {
@@ -157,6 +191,9 @@
                     .stats-hero {
                         grid-template-columns: 1fr;
                     }
+                    .dashboard-controls {
+                        margin-left: 0;
+                    }
                 }
                 @keyframes dashboardSlideIn {
                     from { opacity: 0; transform: translateY(10px) scale(.99); }
@@ -166,7 +203,7 @@
 
             <div class="welcome-banner">
                 <h1>Bienvenue, #{loginBean.utilisateur.lib}</h1>
-                <p>Tableau de bord - Session BTK Finance</p>
+                <p>Tableau de bord - Session #{loginBean.currentFilialeLabel}</p>
             </div>
 
             <div class="dashboard-slider" data-current="0">
@@ -257,93 +294,142 @@
                     </div>
                 </div>
 
-                <div class="dashboard-slide">
-                    <div class="stats-panel">
-                        <div class="card-title">Statistiques globales de l application</div>
+                <ui:fragment rendered="#{dashboardStatsBean.visible}">
+                    <div class="dashboard-slide">
+                        <div class="stats-panel">
+                            <div class="card-title">
+                                <h:outputText value="Statistiques de la session #{dashboardStatsBean.currentFilialeLabel}"
+                                              rendered="#{loginBean.adminRole}"/>
+                                <h:outputText value="Statistiques de mes demandes"
+                                              rendered="#{dashboardStatsBean.consultationScopedStats}"/>
+                            </div>
 
-                        <div class="stats-hero">
-                            <div>
-                                <div class="stats-hero-title">Performance Globale</div>
-                                <div class="stats-hero-value">#{dashboardStatsBean.tauxTraitement}%</div>
-                                <div class="stats-hero-sub">Taux de traitement des demandes</div>
+                            <div class="stats-hero">
+                                <div>
+                                    <div class="stats-hero-title">
+                                        <h:outputText value="Performance Globale"
+                                                      rendered="#{loginBean.adminRole}"/>
+                                        <h:outputText value="Mes demandes"
+                                                      rendered="#{dashboardStatsBean.consultationScopedStats}"/>
+                                    </div>
+                                    <div class="stats-hero-value">#{dashboardStatsBean.tauxTraitement}%</div>
+                                    <div class="stats-hero-sub">
+                                        <h:outputText value="Taux de traitement des demandes"
+                                                      rendered="#{loginBean.adminRole}"/>
+                                        <h:outputText value="Taux de traitement de mes demandes"
+                                                      rendered="#{dashboardStatsBean.consultationScopedStats}"/>
+                                    </div>
+                                </div>
+                                <div class="stats-hero-info">
+                                    <div class="stats-track">
+                                        <span class="stats-track-fill" data-rate="#{dashboardStatsBean.tauxTraitement}"></span>
+                                    </div>
+                                    <div class="stats-hero-row">
+                                        <span>Traitees: #{dashboardStatsBean.demandesTraitees}</span>
+                                        <span>Total: #{dashboardStatsBean.totalDemandes}</span>
+                                    </div>
+                                    <div class="stats-hero-row">
+                                        <span>En attente: #{dashboardStatsBean.demandesEnAttente}</span>
+                                        <span>Restitues: #{dashboardStatsBean.dossiersRestitues}</span>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="stats-hero-info">
-                                <div class="stats-track">
-                                    <span class="stats-track-fill" data-rate="#{dashboardStatsBean.tauxTraitement}"></span>
-                                </div>
-                                <div class="stats-hero-row">
-                                    <span>Traitees: #{dashboardStatsBean.demandesTraitees}</span>
-                                    <span>Total: #{dashboardStatsBean.totalDemandes}</span>
-                                </div>
-                                <div class="stats-hero-row">
-                                    <span>En attente: #{dashboardStatsBean.demandesEnAttente}</span>
-                                    <span>Restitues: #{dashboardStatsBean.dossiersRestitues}</span>
-                                </div>
-                            </div>
-                        </div>
 
-                        <div class="stats-grid">
-                            <div class="stats-item">
-                                <div class="stats-label">Dossiers archives</div>
-                                <div class="stats-value">#{dashboardStatsBean.totalDossiers}</div>
+                            <div class="stats-grid">
+                                <ui:fragment rendered="#{loginBean.adminRole}">
+                                    <div class="stats-item">
+                                        <div class="stats-label">Dossiers archives</div>
+                                        <div class="stats-value">#{dashboardStatsBean.totalDossiers}</div>
+                                    </div>
+                                    <div class="stats-item">
+                                        <div class="stats-label">Boites</div>
+                                        <div class="stats-value">#{dashboardStatsBean.totalBoites}</div>
+                                    </div>
+                                    <div class="stats-item">
+                                        <div class="stats-label">Demandes totales</div>
+                                        <div class="stats-value">#{dashboardStatsBean.totalDemandes}</div>
+                                    </div>
+                                    <div class="stats-item">
+                                        <div class="stats-label">Demandes en attente</div>
+                                        <div class="stats-value">#{dashboardStatsBean.demandesEnAttente}</div>
+                                    </div>
+                                    <div class="stats-item">
+                                        <div class="stats-label">Demandes approuvees</div>
+                                        <div class="stats-value">#{dashboardStatsBean.demandesApprouvees}</div>
+                                    </div>
+                                    <div class="stats-item">
+                                        <div class="stats-label">Demandes refusees</div>
+                                        <div class="stats-value">#{dashboardStatsBean.demandesRefusees}</div>
+                                    </div>
+                                    <div class="stats-item">
+                                        <div class="stats-label">Dossiers restitues</div>
+                                        <div class="stats-value">#{dashboardStatsBean.dossiersRestitues}</div>
+                                    </div>
+                                    <div class="stats-item">
+                                        <div class="stats-label">Utilisateurs totaux</div>
+                                        <div class="stats-value">#{dashboardStatsBean.totalUtilisateurs}</div>
+                                    </div>
+                                    <div class="stats-item">
+                                        <div class="stats-label">Utilisateurs actifs</div>
+                                        <div class="stats-value">#{dashboardStatsBean.utilisateursActifs}</div>
+                                    </div>
+                                    <div class="stats-item">
+                                        <div class="stats-label">Utilisateurs inactifs</div>
+                                        <div class="stats-value">#{dashboardStatsBean.utilisateursInactifs}</div>
+                                    </div>
+                                </ui:fragment>
+                                <ui:fragment rendered="#{dashboardStatsBean.consultationScopedStats}">
+                                    <div class="stats-item">
+                                        <div class="stats-label">Demandes totales</div>
+                                        <div class="stats-value">#{dashboardStatsBean.totalDemandes}</div>
+                                    </div>
+                                    <div class="stats-item">
+                                        <div class="stats-label">Demandes en attente</div>
+                                        <div class="stats-value">#{dashboardStatsBean.demandesEnAttente}</div>
+                                    </div>
+                                    <div class="stats-item">
+                                        <div class="stats-label">Demandes approuvees</div>
+                                        <div class="stats-value">#{dashboardStatsBean.demandesApprouvees}</div>
+                                    </div>
+                                    <div class="stats-item">
+                                        <div class="stats-label">Demandes refusees</div>
+                                        <div class="stats-value">#{dashboardStatsBean.demandesRefusees}</div>
+                                    </div>
+                                    <div class="stats-item">
+                                        <div class="stats-label">Dossiers restitues</div>
+                                        <div class="stats-value">#{dashboardStatsBean.dossiersRestitues}</div>
+                                    </div>
+                                    <div class="stats-item">
+                                        <div class="stats-label">Dossiers non restitues</div>
+                                        <div class="stats-value">#{dashboardStatsBean.dossiersNonRestitues}</div>
+                                    </div>
+                                </ui:fragment>
                             </div>
-                            <div class="stats-item">
-                                <div class="stats-label">Boites</div>
-                                <div class="stats-value">#{dashboardStatsBean.totalBoites}</div>
-                            </div>
-                            <div class="stats-item">
-                                <div class="stats-label">Demandes totales</div>
-                                <div class="stats-value">#{dashboardStatsBean.totalDemandes}</div>
-                            </div>
-                            <div class="stats-item">
-                                <div class="stats-label">Demandes en attente</div>
-                                <div class="stats-value">#{dashboardStatsBean.demandesEnAttente}</div>
-                            </div>
-                            <div class="stats-item">
-                                <div class="stats-label">Demandes approuvees</div>
-                                <div class="stats-value">#{dashboardStatsBean.demandesApprouvees}</div>
-                            </div>
-                            <div class="stats-item">
-                                <div class="stats-label">Demandes refusees</div>
-                                <div class="stats-value">#{dashboardStatsBean.demandesRefusees}</div>
-                            </div>
-                            <div class="stats-item">
-                                <div class="stats-label">Dossiers restitues</div>
-                                <div class="stats-value">#{dashboardStatsBean.dossiersRestitues}</div>
-                            </div>
-                            <div class="stats-item">
-                                <div class="stats-label">Utilisateurs totaux</div>
-                                <div class="stats-value">#{dashboardStatsBean.totalUtilisateurs}</div>
-                            </div>
-                            <div class="stats-item">
-                                <div class="stats-label">Utilisateurs actifs</div>
-                                <div class="stats-value">#{dashboardStatsBean.utilisateursActifs}</div>
-                            </div>
-                            <div class="stats-item">
-                                <div class="stats-label">Utilisateurs inactifs</div>
-                                <div class="stats-value">#{dashboardStatsBean.utilisateursInactifs}</div>
-                            </div>
-                        </div>
 
-                        <div class="stats-meta">
-                            <span class="stats-chip">Taux traitement demandes: #{dashboardStatsBean.tauxTraitement}%</span>
-                            <span class="stats-chip">
-                                Derniere mise a jour:
-                                <h:outputText value="#{dashboardStatsBean.refreshedAt}">
-                                    <f:convertDateTime pattern="dd/MM/yyyy HH:mm:ss"/>
-                                </h:outputText>
-                            </span>
+                            <div class="stats-meta">
+                                <span class="stats-chip">Taux traitement demandes: #{dashboardStatsBean.tauxTraitement}%</span>
+                                <span class="stats-chip">
+                                    Derniere mise a jour:
+                                    <h:outputText value="#{dashboardStatsBean.refreshedAt}">
+                                        <f:convertDateTime pattern="dd/MM/yyyy HH:mm:ss"/>
+                                    </h:outputText>
+                                </span>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div class="dashboard-autorotate">
-                    <span class="dashboard-note">Changement automatique chaque 10 secondes</span>
-                    <div class="dashboard-dots" aria-hidden="true">
-                        <span class="dashboard-dot is-active"></span>
-                        <span class="dashboard-dot"></span>
+                    <div class="dashboard-autorotate">
+                        <span class="dashboard-note">Changement automatique chaque 10 secondes avec navigation manuelle.</span>
+                        <div class="dashboard-controls">
+                            <button type="button" class="dashboard-nav" onclick="BTKDashboardSlider.prev()" aria-label="Afficher le slide precedent">&#8249;</button>
+                            <div class="dashboard-dots" aria-label="Navigation du slider">
+                                <button type="button" class="dashboard-dot is-active" onclick="BTKDashboardSlider.goTo(0)" aria-label="Afficher les informations utilisateur" aria-pressed="true"></button>
+                                <button type="button" class="dashboard-dot" onclick="BTKDashboardSlider.goTo(1)" aria-label="Afficher les statistiques" aria-pressed="false"></button>
+                            </div>
+                            <button type="button" class="dashboard-nav" onclick="BTKDashboardSlider.next()" aria-label="Afficher le slide suivant">&#8250;</button>
+                        </div>
                     </div>
-                </div>
+                </ui:fragment>
             </div>
         </div>
 
@@ -379,6 +465,7 @@
                     }
                     for (i = 0; i &lt; dots.length; i++) {
                         dots[i].classList.toggle('is-active', i === index);
+                        dots[i].setAttribute('aria-pressed', i === index ? 'true' : 'false');
                     }
                     root.setAttribute('data-current', String(index));
                 }
@@ -389,6 +476,14 @@
                     }
                     var current = Number(root.getAttribute('data-current') || '0');
                     activate(root, current + 1);
+                }
+
+                function prev(root) {
+                    if (!root) {
+                        return;
+                    }
+                    var current = Number(root.getAttribute('data-current') || '0');
+                    activate(root, current - 1);
                 }
 
                 function startAuto() {
@@ -408,6 +503,11 @@
                         window.clearInterval(timer);
                         timer = null;
                     }
+                }
+
+                function restartAuto() {
+                    stopAuto();
+                    startAuto();
                 }
 
                 function syncStatTrack() {
@@ -434,9 +534,15 @@
                 window.BTKDashboardSlider = {
                     goTo: function (index) {
                         activate(root, index);
+                        restartAuto();
                     },
                     next: function () {
                         next(root);
+                        restartAuto();
+                    },
+                    prev: function () {
+                        prev(root);
+                        restartAuto();
                     }
                 };
 
