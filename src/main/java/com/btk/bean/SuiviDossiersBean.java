@@ -127,7 +127,8 @@ public class SuiviDossiersBean implements Serializable {
                 row.getBoite(),
                 row.getEmetteur(),
                 row.getRecepteur(),
-                adminSender
+                adminSender,
+                resolveSessionFiliale()
         );
 
         if (sent == null) {

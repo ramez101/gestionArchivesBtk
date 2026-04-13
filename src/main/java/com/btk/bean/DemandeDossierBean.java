@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Locale;
 
 import com.btk.model.ArchDossier;
-import com.btk.util.DemandeFilialeUtil;
 import com.btk.util.DossierEmpUtil;
 import com.btk.util.FilialeUtil;
 
@@ -114,6 +113,7 @@ public class DemandeDossierBean implements Serializable {
         String cleanTypeDemande = normalize(typeDemande);
         String cleanCommentaire = normalize(commentaire);
         String emetteur = resolveEmitter();
+        String sessionFiliale = resolveSessionFiliale();
 
         if (cleanPin.isBlank() || cleanBoite.isBlank()) {
             addError("Informations dossier incomplètes.");
@@ -130,9 +130,19 @@ public class DemandeDossierBean implements Serializable {
             return;
         }
 
+        if (sessionFiliale.isBlank()) {
+            addError("Profil filiale introuvable pour l'envoi de la demande.");
+            return;
+        }
+
         EntityManager em = getEMF().createEntityManager();
         boolean txStarted = false;
         try {
+            if (!hasEligibleAdminReceiver(em, sessionFiliale)) {
+                addError("Aucun administrateur actif disponible pour la filiale " + resolveTargetFilialeLabel() + ".");
+                return;
+            }
+
             utx.begin();
             txStarted = true;
             em.joinTransaction();
@@ -141,24 +151,19 @@ public class DemandeDossierBean implements Serializable {
                             "SELECT NVL(MAX(ID_DEMANDE), 0) + 1 FROM DEMANDE_DOSSIER")
                     .getSingleResult();
 
-            boolean hasFilialeColumn = DemandeFilialeUtil.hasFilialeColumn(em);
+            String targetReceiver = resolveTargetReceiverLabel();
             Query insertQuery = em.createNativeQuery(
-                            hasFilialeColumn
-                                    ? "INSERT INTO DEMANDE_DOSSIER " +
-                                      "(ID_DEMANDE, PIN, BOITE, EMETTEUR, RECEPTEUR, DATE_ENVOI, DATE_APPROUVE, DATE_RESTITUTION, TYPE_DEMANDE, COMMENTAIRE, FILIALE) " +
-                                      "VALUES (:id, :pin, :boite, :emetteur, NULL, SYSDATE, NULL, NULL, :typeDemande, :commentaire, :filiale)"
-                                    : "INSERT INTO DEMANDE_DOSSIER " +
-                                      "(ID_DEMANDE, PIN, BOITE, EMETTEUR, RECEPTEUR, DATE_ENVOI, DATE_APPROUVE, DATE_RESTITUTION, TYPE_DEMANDE, COMMENTAIRE) " +
-                                      "VALUES (:id, :pin, :boite, :emetteur, NULL, SYSDATE, NULL, NULL, :typeDemande, :commentaire)")
+                            "INSERT INTO DEMANDE_DOSSIER " +
+                            "(ID_DEMANDE, PIN, BOITE, EMETTEUR, RECEPTEUR, DATE_ENVOI, DATE_APPROUVE, DATE_RESTITUTION, TYPE_DEMANDE, COMMENTAIRE, FILIALE) " +
+                            "VALUES (:id, :pin, :boite, :emetteur, :recepteur, SYSDATE, NULL, NULL, :typeDemande, :commentaire, :filiale)")
                     .setParameter("id", nextId == null ? 1L : nextId.longValue())
                     .setParameter("pin", cleanPin)
                     .setParameter("boite", cleanBoite)
                     .setParameter("emetteur", emetteur)
+                    .setParameter("recepteur", targetReceiver)
                     .setParameter("typeDemande", cleanTypeDemande)
-                    .setParameter("commentaire", cleanCommentaire);
-            if (hasFilialeColumn) {
-                insertQuery.setParameter("filiale", resolveSessionFiliale());
-            }
+                    .setParameter("commentaire", cleanCommentaire)
+                    .setParameter("filiale", sessionFiliale);
             insertQuery.executeUpdate();
 
             utx.commit();
@@ -208,6 +213,54 @@ public class DemandeDossierBean implements Serializable {
             }
         }
         return "unknown";
+    }
+
+    private boolean hasEligibleAdminReceiver(EntityManager em, String filialeCode) {
+        StringBuilder sql = new StringBuilder(
+                "SELECT COUNT(*) FROM ARCH_UTILISATEURS " +
+                "WHERE UPPER(TRIM(PUTI)) = UPPER(TRIM(:puti)) " +
+                "AND UPPER(TRIM(ROLE)) IN ('ADMIN', 'SUPER_ADMIN')");
+
+        if (hasActiveColumn(em)) {
+            sql.append(" AND UPPER(TRIM(NVL(TO_CHAR(ACTIVE), '1'))) ")
+               .append("IN ('1', 'TRUE', 'Y', 'YES', 'O', 'OUI', 'ACTIF', 'ACTIVE')");
+        }
+
+        Number count = (Number) em.createNativeQuery(sql.toString())
+                .setParameter("puti", filialeCode)
+                .getSingleResult();
+        return count != null && count.longValue() > 0L;
+    }
+
+    private boolean hasActiveColumn(EntityManager em) {
+        Number count = (Number) em.createNativeQuery(
+                        "SELECT COUNT(*) FROM USER_TAB_COLUMNS " +
+                        "WHERE TABLE_NAME = 'ARCH_UTILISATEURS' " +
+                        "AND COLUMN_NAME = 'ACTIVE'")
+                .getSingleResult();
+        return count != null && count.longValue() > 0L;
+    }
+
+    private String resolveTargetReceiverLabel() {
+        return "Admins " + resolveTargetFilialeLabel();
+    }
+
+    private String resolveTargetFilialeLabel() {
+        if (loginBean != null) {
+            String label = normalize(loginBean.getCurrentFilialeLabel());
+            if (!label.isBlank()) {
+                return label;
+            }
+        }
+
+        String filialeCode = resolveSessionFiliale();
+        if ("finance".equalsIgnoreCase(filialeCode)) {
+            return "Finance";
+        }
+        if ("bank".equalsIgnoreCase(filialeCode)) {
+            return "Bank";
+        }
+        return "Admin";
     }
 
     private String normalize(String value) {

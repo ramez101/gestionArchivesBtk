@@ -1083,6 +1083,90 @@
                 </div>
                 <div class="nav-user">
                     <span>Connecté : <strong>#{loginBean.utilisateur.unix}</strong></span>
+                    <h:form id="notifForm"
+                            prependId="false"
+                            styleClass="notif-form"
+                            rendered="#{loginBean.adminRole or loginBean.consultationRole}">
+                        <h:inputHidden id="notifUserKey" value="#{loginBean.utilisateur.cuti}"/>
+                        <p:remoteCommand name="refreshNavbarNotifications"
+                                         actionListener="#{loginBean.refreshNotifications}"
+                                         process="@this"
+                                         update="notifBadge notifHeader notifEmpty notifList"/>
+                        <p:remoteCommand name="markNavbarNotificationsSeen"
+                                         actionListener="#{loginBean.markNotificationsAsSeen}"
+                                         process="@this"
+                                         update="notifWrapper"
+                                         oncomplete="if (PF('navbarNotifPoll')) { PF('navbarNotifPoll').start(); }"/>
+                        <p:poll interval="5"
+                                widgetVar="navbarNotifPoll"
+                                listener="#{loginBean.refreshNotifications}"
+                                process="@this"
+                                update="notifBadge notifHeader notifEmpty notifList"
+                                oncomplete="if (window.BTKNotif) { BTKNotif.onPollComplete(); }"
+                                global="false"/>
+                        <h:panelGroup id="notifWrapper" layout="block" styleClass="notif-wrapper">
+                            <h:panelGroup id="notifBell"
+                                          layout="block"
+                                          styleClass="notif-bell #{loginBean.newNotificationsAvailable ? 'has-new' : ''}"
+                                          title="Notifications">
+                                <span class="pi pi-bell"/>
+                                <h:panelGroup id="notifBadge" layout="block">
+                                    <h:panelGroup rendered="#{loginBean.newNotificationCount gt 0}" layout="block" styleClass="notif-badge">
+                                        #{loginBean.notificationBadge}
+                                    </h:panelGroup>
+                                </h:panelGroup>
+                            </h:panelGroup>
+
+                            <p:overlayPanel id="notifPanel"
+                                            for="notifBell"
+                                            showEffect="fade"
+                                            hideEffect="fade"
+                                            onShow="if (PF('navbarNotifPoll')) { PF('navbarNotifPoll').stop(); } if (window.refreshNavbarNotifications) { refreshNavbarNotifications(); }"
+                                            dismissable="true"
+                                            showCloseIcon="false"
+                                            hideOnEscape="true"
+                                            onHide="if (window.markNavbarNotificationsSeen) { markNavbarNotificationsSeen(); }"
+                                            appendTo="@(body)"
+                                            styleClass="notif-panel">
+                                <h:panelGroup id="notifHeader" layout="block">
+                                    <h:panelGroup rendered="#{not empty loginBean.notifications}" layout="block" styleClass="notif-header">
+                                        #{loginBean.newNotificationCount} nouvelle(s) notification(s)
+                                    </h:panelGroup>
+                                </h:panelGroup>
+                                <h:panelGroup id="notifEmpty" layout="block">
+                                    <h:panelGroup rendered="#{empty loginBean.notifications}" layout="block" styleClass="notif-empty">
+                                        Aucune notification.
+                                    </h:panelGroup>
+                                </h:panelGroup>
+                                <h:panelGroup id="notifList" layout="block">
+                                    <h:panelGroup rendered="#{not empty loginBean.notifications}" layout="block" styleClass="notif-list">
+                                        <ui:repeat value="#{loginBean.notifications}" var="notif">
+                                            <h:link outcome="#{notif.outcome}" styleClass="notif-link">
+                                                <div class="notif-item #{notif.severity}"
+                                                     data-notif-key="#{notif.key}"
+                                                     data-notif-new="#{notif.newNotification}"
+                                                     data-notif-title="#{notif.title}"
+                                                     data-notif-message="#{notif.message}"
+                                                     data-notif-severity="#{notif.severity}">
+                                                    <div class="title">#{notif.title}</div>
+                                                    <h:panelGroup rendered="#{notif.newNotification}" layout="block" styleClass="notif-pill">
+                                                        Nouveau
+                                                    </h:panelGroup>
+                                                    <div class="message">#{notif.message}</div>
+                                                    <div class="date">
+                                                        <h:outputText value="#{notif.date}" rendered="#{not empty notif.date}">
+                                                            <f:convertDateTime pattern="dd/MM/yyyy HH:mm"/>
+                                                        </h:outputText>
+                                                    </div>
+                                                </div>
+                                            </h:link>
+                                        </ui:repeat>
+                                    </h:panelGroup>
+                                </h:panelGroup>
+                            </p:overlayPanel>
+                        </h:panelGroup>
+                        <div id="notifPopupHost" class="notif-popup-host"/>
+                    </h:form>
                     <h:form>
                         <p:commandButton value="Déconnexion"
                                          action="#{loginBean.logout}"
@@ -1148,6 +1232,197 @@
                     root.classList.toggle('is-revealed');
                 }
             };
+
+            window.BTKNotif = (function () {
+                var shown = {};
+                var hostId = 'notifPopupHost';
+
+                function hostEl() {
+                    return document.getElementById(hostId);
+                }
+
+                function shownStorageKey() {
+                    var userKey = '';
+                    var userField = document.getElementById('notifUserKey');
+                    if (userField) {
+                        userKey = String(userField.value || '').trim();
+                    }
+                    if (!userKey) {
+                        userKey = 'default';
+                    }
+                    return 'btk.notif.shown.' + userKey;
+                }
+
+                function saveShown() {
+                    try {
+                        if (!window.sessionStorage) {
+                            return;
+                        }
+                        window.sessionStorage.setItem(shownStorageKey(), JSON.stringify(shown));
+                    } catch (e) {
+                        // Ignore storage errors.
+                    }
+                }
+
+                function loadShown() {
+                    try {
+                        if (!window.sessionStorage) {
+                            shown = {};
+                            return;
+                        }
+                        var raw = window.sessionStorage.getItem(shownStorageKey());
+                        if (!raw) {
+                            shown = {};
+                            return;
+                        }
+                        var parsed = JSON.parse(raw);
+                        if (parsed &amp;&amp; typeof parsed === 'object') {
+                            shown = parsed;
+                        } else {
+                            shown = {};
+                        }
+                    } catch (e) {
+                        shown = {};
+                    }
+                }
+
+                function resetShown() {
+                    shown = {};
+                    saveShown();
+                }
+
+                function hasNewBadge() {
+                    var badge = document.getElementById('notifBadge');
+                    if (!badge) {
+                        return false;
+                    }
+                    var text = String(badge.textContent || '').trim();
+                    return text.length > 0;
+                }
+
+                function refreshBellState() {
+                    var bell = document.getElementById('notifBell');
+                    var has = hasNewBadge();
+                    if (bell) {
+                        bell.classList.toggle('has-new', has);
+                    }
+                    if (!has) {
+                        resetShown();
+                    }
+                }
+
+                function removePopup(node) {
+                    if (!node) {
+                        return;
+                    }
+                    node.classList.add('is-hide');
+                    window.setTimeout(function () {
+                        if (node.parentNode) {
+                            node.parentNode.removeChild(node);
+                        }
+                    }, 220);
+                }
+
+                function createPopup(title, message, severity) {
+                    var host = hostEl();
+                    if (!host) {
+                        return;
+                    }
+
+                    var popup = document.createElement('div');
+                    popup.className = 'notif-popup ' + (severity || 'pending');
+
+                    var close = document.createElement('button');
+                    close.type = 'button';
+                    close.className = 'popup-close';
+                    close.textContent = 'x';
+                    close.addEventListener('click', function () {
+                        removePopup(popup);
+                    });
+
+                    var popupTitle = document.createElement('div');
+                    popupTitle.className = 'popup-title';
+                    popupTitle.textContent = title || 'Nouvelle notification';
+
+                    var popupMessage = document.createElement('div');
+                    popupMessage.className = 'popup-message';
+                    popupMessage.textContent = message || '';
+
+                    popup.appendChild(close);
+                    popup.appendChild(popupTitle);
+                    popup.appendChild(popupMessage);
+                    host.appendChild(popup);
+
+                    var hideDelay = severity === 'alert' ? 12000 : 6500;
+                    window.setTimeout(function () {
+                        removePopup(popup);
+                    }, hideDelay);
+                }
+
+                function readTextFrom(item, selector) {
+                    if (!item) {
+                        return '';
+                    }
+                    var node = item.querySelector(selector);
+                    if (!node) {
+                        return '';
+                    }
+                    return String(node.textContent || '').trim();
+                }
+
+                function scanAndPopup() {
+                    var items = document.querySelectorAll('#notifList .notif-item');
+                    if (!items || items.length === 0) {
+                        return;
+                    }
+
+                    Array.prototype.forEach.call(items, function (item, index) {
+                        if (!item) {
+                            return;
+                        }
+                        var isNew = String(item.getAttribute('data-notif-new') || '');
+                        if (isNew !== 'true') {
+                            return;
+                        }
+
+                        var key = String(item.getAttribute('data-notif-key') || '').trim();
+                        if (!key) {
+                            key = 'notif_' + String(index);
+                        }
+                        if (shown[key]) {
+                            return;
+                        }
+                        shown[key] = true;
+                        saveShown();
+
+                        var title = String(item.getAttribute('data-notif-title') || '').trim();
+                        var message = String(item.getAttribute('data-notif-message') || '').trim();
+                        var severity = String(item.getAttribute('data-notif-severity') || '').trim();
+                        if (!title) {
+                            title = readTextFrom(item, '.title');
+                        }
+                        if (!message) {
+                            message = readTextFrom(item, '.message');
+                        }
+                        createPopup(title, message, severity);
+                    });
+                }
+
+                loadShown();
+
+                return {
+                    onPollComplete: function () {
+                        refreshBellState();
+                        scanAndPopup();
+                    }
+                };
+            })();
+
+            window.setTimeout(function () {
+                if (window.BTKNotif) {
+                    BTKNotif.onPollComplete();
+                }
+            }, 350);
 
             var sidebar = sidebarEl();
             var scrim = scrimEl();

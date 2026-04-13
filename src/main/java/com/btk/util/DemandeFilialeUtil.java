@@ -29,6 +29,7 @@ public final class DemandeFilialeUtil {
             String demandeFiliale = qualified(demandeReference, "FILIALE");
             return "(" +
                     "LOWER(TRIM(" + demandeFiliale + ")) = :sessionFiliale " +
+                    "OR LOWER(TRIM(" + demandeFiliale + ")) = :sessionLegacyFiliale " +
                     "OR (" + demandeFiliale + " IS NULL AND " + fallbackPredicate + ")" +
                     ")";
         }
@@ -59,6 +60,7 @@ public final class DemandeFilialeUtil {
                 "WHERE UPPER(TRIM(ad.PIN)) = " + pinColumn + " " +
                 "AND (" +
                     "LOWER(TRIM(ad.FILIALE)) = :sessionFiliale " +
+                    "OR LOWER(TRIM(ad.FILIALE)) = :sessionLegacyFiliale " +
                     "OR (" +
                         "ad.FILIALE IS NULL " +
                         "AND (" +

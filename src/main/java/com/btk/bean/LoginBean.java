@@ -521,22 +521,22 @@ public class LoginBean implements Serializable {
         }
         Set<String> currentKeys = new HashSet<>();
 
-        long approvedCount = toLongValue(em.createNativeQuery(
-                        "SELECT COUNT(*) FROM DEMANDE_DOSSIER " +
-                        "WHERE DATE_APPROUVE IS NOT NULL " +
-                        "AND DATE_RESTITUTION IS NULL " +
-                        "AND UPPER(TRIM(EMETTEUR)) IN (UPPER(TRIM(?)), UPPER(TRIM(?)))")
-                .setParameter(1, unix)
-                .setParameter(2, cutiValue)
+        long approvedCount = toLongValue(createScopedConsultationDemandeQuery(
+                        em,
+                        "SELECT COUNT(*)",
+                        "dd.DATE_APPROUVE IS NOT NULL AND dd.DATE_RESTITUTION IS NULL",
+                        null,
+                        unix,
+                        cutiValue)
                 .getSingleResult());
 
-        long refusedCount = toLongValue(em.createNativeQuery(
-                        "SELECT COUNT(*) FROM DEMANDE_DOSSIER " +
-                        "WHERE DATE_APPROUVE IS NULL " +
-                        "AND DATE_RESTITUTION IS NOT NULL " +
-                        "AND UPPER(TRIM(EMETTEUR)) IN (UPPER(TRIM(?)), UPPER(TRIM(?)))")
-                .setParameter(1, unix)
-                .setParameter(2, cutiValue)
+        long refusedCount = toLongValue(createScopedConsultationDemandeQuery(
+                        em,
+                        "SELECT COUNT(*)",
+                        "dd.DATE_APPROUVE IS NULL AND dd.DATE_RESTITUTION IS NOT NULL",
+                        null,
+                        unix,
+                        cutiValue)
                 .getSingleResult());
 
         List<NotificationItem> loaded = new ArrayList<>();
@@ -553,15 +553,13 @@ public class LoginBean implements Serializable {
             ));
 
             @SuppressWarnings("unchecked")
-            List<Object[]> approvedRows = em.createNativeQuery(
-                            "SELECT ID_DEMANDE, PIN, RECEPTEUR, DATE_APPROUVE " +
-                                    "FROM DEMANDE_DOSSIER " +
-                                    "WHERE DATE_APPROUVE IS NOT NULL " +
-                                    "AND DATE_RESTITUTION IS NULL " +
-                                    "AND UPPER(TRIM(EMETTEUR)) IN (UPPER(TRIM(?)), UPPER(TRIM(?))) " +
-                                    "ORDER BY DATE_APPROUVE DESC")
-                    .setParameter(1, unix)
-                    .setParameter(2, cutiValue)
+            List<Object[]> approvedRows = createScopedConsultationDemandeQuery(
+                            em,
+                            "SELECT dd.ID_DEMANDE, dd.PIN, dd.RECEPTEUR, dd.DATE_APPROUVE",
+                            "dd.DATE_APPROUVE IS NOT NULL AND dd.DATE_RESTITUTION IS NULL",
+                            "dd.DATE_APPROUVE DESC",
+                            unix,
+                            cutiValue)
                     .setMaxResults(5)
                     .getResultList();
 
@@ -596,15 +594,13 @@ public class LoginBean implements Serializable {
             ));
 
             @SuppressWarnings("unchecked")
-            List<Object[]> refusedRows = em.createNativeQuery(
-                            "SELECT ID_DEMANDE, PIN, RECEPTEUR, DATE_RESTITUTION " +
-                                    "FROM DEMANDE_DOSSIER " +
-                                    "WHERE DATE_APPROUVE IS NULL " +
-                                    "AND DATE_RESTITUTION IS NOT NULL " +
-                                    "AND UPPER(TRIM(EMETTEUR)) IN (UPPER(TRIM(?)), UPPER(TRIM(?))) " +
-                                    "ORDER BY DATE_RESTITUTION DESC")
-                    .setParameter(1, unix)
-                    .setParameter(2, cutiValue)
+            List<Object[]> refusedRows = createScopedConsultationDemandeQuery(
+                            em,
+                            "SELECT dd.ID_DEMANDE, dd.PIN, dd.RECEPTEUR, dd.DATE_RESTITUTION",
+                            "dd.DATE_APPROUVE IS NULL AND dd.DATE_RESTITUTION IS NOT NULL",
+                            "dd.DATE_RESTITUTION DESC",
+                            unix,
+                            cutiValue)
                     .setMaxResults(5)
                     .getResultList();
 
@@ -627,16 +623,15 @@ public class LoginBean implements Serializable {
         }
 
         @SuppressWarnings("unchecked")
-        List<Object[]> overdueRows = em.createNativeQuery(
-                        "SELECT ID_DEMANDE, PIN, BOITE, DATE_APPROUVE " +
-                        "FROM DEMANDE_DOSSIER " +
-                        "WHERE DATE_APPROUVE IS NOT NULL " +
-                        "AND DATE_RESTITUTION IS NULL " +
-                        "AND TRUNC(SYSDATE) - TRUNC(DATE_APPROUVE) >= 10 " +
-                        "AND UPPER(TRIM(EMETTEUR)) IN (UPPER(TRIM(?)), UPPER(TRIM(?))) " +
-                        "ORDER BY DATE_APPROUVE ASC")
-                .setParameter(1, unix)
-                .setParameter(2, cutiValue)
+        List<Object[]> overdueRows = createScopedConsultationDemandeQuery(
+                        em,
+                        "SELECT dd.ID_DEMANDE, dd.PIN, dd.BOITE, dd.DATE_APPROUVE",
+                        "dd.DATE_APPROUVE IS NOT NULL " +
+                                "AND dd.DATE_RESTITUTION IS NULL " +
+                                "AND TRUNC(SYSDATE) - TRUNC(dd.DATE_APPROUVE) >= 10",
+                        "dd.DATE_APPROUVE ASC",
+                        unix,
+                        cutiValue)
                 .getResultList();
 
         long alertCount = overdueRows == null ? 0L : overdueRows.size();
@@ -686,7 +681,7 @@ public class LoginBean implements Serializable {
         }
 
         List<RappelNotificationStore.RappelNotification> rappels =
-                RappelNotificationStore.findForRecipient(unix, cutiValue);
+                RappelNotificationStore.findForRecipient(unix, cutiValue, getCurrentFilialeCode());
         long rappelCount = rappels == null ? 0L : rappels.size();
         if (rappelCount > 0L) {
             String summaryKey = "consult.reminder.summary";
@@ -764,6 +759,36 @@ public class LoginBean implements Serializable {
         }
 
         Query query = em.createNativeQuery(sql.toString());
+        DemandeFilialeUtil.bindParameters(query, filiale, legacyFiliale);
+        return query;
+    }
+
+    private Query createScopedConsultationDemandeQuery(EntityManager em,
+                                                       String selectClause,
+                                                       String additionalWhere,
+                                                       String orderByClause,
+                                                       String unix,
+                                                       String cutiValue) {
+        String filiale = getCurrentFilialeCode();
+        String legacyFiliale = getCurrentFilialeId();
+        String filialePredicate = DemandeFilialeUtil.buildPredicate(em, "dd", filiale, legacyFiliale);
+
+        StringBuilder sql = new StringBuilder(selectClause)
+                .append(" FROM DEMANDE_DOSSIER dd ")
+                .append("WHERE ")
+                .append(filialePredicate)
+                .append(" AND UPPER(TRIM(dd.EMETTEUR)) IN (UPPER(TRIM(:emetteurUnix)), UPPER(TRIM(:emetteurCuti)))");
+
+        if (additionalWhere != null && !additionalWhere.isBlank()) {
+            sql.append(" AND ").append(additionalWhere);
+        }
+        if (orderByClause != null && !orderByClause.isBlank()) {
+            sql.append(" ORDER BY ").append(orderByClause);
+        }
+
+        Query query = em.createNativeQuery(sql.toString())
+                .setParameter("emetteurUnix", unix)
+                .setParameter("emetteurCuti", cutiValue);
         DemandeFilialeUtil.bindParameters(query, filiale, legacyFiliale);
         return query;
     }

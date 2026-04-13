@@ -1,5 +1,7 @@
 package com.btk.bean;
 
+import com.btk.util.FilialeUtil;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -28,8 +30,9 @@ public final class RappelNotificationStore {
                                                      String boite,
                                                      String emetteur,
                                                      String recepteur,
-                                                     String sentBy) {
-        String recipientKey = normalize(emetteur);
+                                                     String sentBy,
+                                                     String filiale) {
+        String recipientKey = buildRecipientKey(filiale, emetteur);
         if (recipientKey.isBlank()) {
             return null;
         }
@@ -42,6 +45,7 @@ public final class RappelNotificationStore {
                 safe(emetteur),
                 safe(recepteur),
                 safe(sentBy),
+                normalizeFiliale(filiale),
                 new Date()
         );
 
@@ -60,10 +64,10 @@ public final class RappelNotificationStore {
         return event;
     }
 
-    public static List<RappelNotification> findForRecipient(String unix, String cuti) {
+    public static List<RappelNotification> findForRecipient(String unix, String cuti, String filiale) {
         Map<Long, RappelNotification> merged = new LinkedHashMap<>();
-        mergeByKey(merged, normalize(unix));
-        mergeByKey(merged, normalize(cuti));
+        mergeByKey(merged, buildRecipientKey(filiale, unix));
+        mergeByKey(merged, buildRecipientKey(filiale, cuti));
 
         List<RappelNotification> result = new ArrayList<>(merged.values());
         result.sort((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()));
@@ -93,6 +97,23 @@ public final class RappelNotificationStore {
         return value == null ? "" : value.trim().toLowerCase();
     }
 
+    private static String normalizeFiliale(String value) {
+        return normalize(FilialeUtil.normalizeKey(value));
+    }
+
+    private static String buildRecipientKey(String filiale, String recipient) {
+        String normalizedRecipient = normalize(recipient);
+        if (normalizedRecipient.isBlank()) {
+            return "";
+        }
+
+        String normalizedFiliale = normalizeFiliale(filiale);
+        if (normalizedFiliale.isBlank()) {
+            return normalizedRecipient;
+        }
+        return normalizedFiliale + "|" + normalizedRecipient;
+    }
+
     private static String safe(String value) {
         return value == null ? "" : value.trim();
     }
@@ -105,6 +126,7 @@ public final class RappelNotificationStore {
         private final String emetteur;
         private final String recepteur;
         private final String sentBy;
+        private final String filiale;
         private final Date createdAt;
 
         private RappelNotification(long id,
@@ -114,6 +136,7 @@ public final class RappelNotificationStore {
                                    String emetteur,
                                    String recepteur,
                                    String sentBy,
+                                   String filiale,
                                    Date createdAt) {
             this.id = id;
             this.idDemande = idDemande;
@@ -122,6 +145,7 @@ public final class RappelNotificationStore {
             this.emetteur = emetteur;
             this.recepteur = recepteur;
             this.sentBy = sentBy;
+            this.filiale = filiale;
             this.createdAt = createdAt;
         }
 
@@ -151,6 +175,10 @@ public final class RappelNotificationStore {
 
         public String getSentBy() {
             return sentBy;
+        }
+
+        public String getFiliale() {
+            return filiale;
         }
 
         public Date getCreatedAt() {
